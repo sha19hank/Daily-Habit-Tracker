@@ -1,0 +1,40 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Gradle
+.gradle/
+build/
+**/build/
+
+# Local configuration
+local.properties
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+*.iws
+*.ipr
+/out/
+captures/
+
+# Keystore and signing configs
+*.jks
+*.keystore
+*.pk8
+*.pem
+*.der
+*.p12
+*.pfx
+keystore.properties
+key.properties
+signing.properties
+signing/
+app/signing/
+app/release/
+**/release/
+
+# Release artifacts
+*.apk
+*.aab
+*.apks
