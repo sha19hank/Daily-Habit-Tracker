@@ -16,6 +16,9 @@ interface HabitDao {
     @Query("SELECT * FROM habits")
     suspend fun getHabitsOnce(): List<HabitEntity>
 
+    @Query("SELECT * FROM habits WHERE goalId = :goalId ORDER BY createdDate DESC")
+    suspend fun getHabitsByGoalId(goalId: Long): List<HabitEntity>
+
     @Query("SELECT * FROM habits WHERE id = :id")
     suspend fun getHabitById(id: Long): HabitEntity?
 
@@ -39,6 +42,9 @@ interface HabitDao {
 
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertCompletion(completion: HabitCompletionEntity): Long
+
+    @Query("SELECT habitId FROM habit_completions WHERE completionDate = :date")
+    suspend fun getCompletedHabitIdsForDate(date: String): List<Long>
 
     @Query("SELECT COUNT(*) FROM habit_completions WHERE habitId = :habitId AND completionDate = :date")
     suspend fun hasCompletionForDate(habitId: Long, date: String): Int

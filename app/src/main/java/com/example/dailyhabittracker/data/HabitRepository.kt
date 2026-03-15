@@ -10,9 +10,67 @@ import java.time.temporal.ChronoUnit
 class HabitRepository(
     private val database: HabitDatabase,
     private val dao: HabitDao,
+    private val goalDao: GoalDao,
+    private val journalDao: JournalDao,
     private val settings: SettingsRepository
 ) {
     fun getHabits(): Flow<List<HabitEntity>> = dao.getHabits()
+
+    fun getGoals(): Flow<List<GoalEntity>> = goalDao.getGoals()
+
+    suspend fun getGoalsOnce(): List<GoalEntity> = goalDao.getGoalsOnce()
+
+    suspend fun addGoal(
+        title: String,
+        description: String?,
+        startDate: LocalDate,
+        deadline: LocalDate?
+    ) {
+        val goal = GoalEntity(
+            title = title.trim(),
+            description = description?.trim()?.ifBlank { null },
+            startDate = startDate,
+            deadline = deadline
+        )
+        goalDao.insertGoal(goal)
+    }
+
+    suspend fun updateGoal(goal: GoalEntity) {
+        goalDao.updateGoal(goal)
+    }
+
+    suspend fun deleteGoal(goal: GoalEntity) {
+        goalDao.deleteGoal(goal)
+    }
+
+    fun getJournalEntries(): Flow<List<JournalEntryEntity>> = journalDao.getEntries()
+
+    suspend fun getJournalEntryByDate(date: LocalDate): JournalEntryEntity? {
+        return journalDao.getEntryByDate(date.toString())
+    }
+
+    suspend fun upsertJournalEntry(
+        title: String,
+        body: String,
+        date: LocalDate,
+        mood: String?
+    ) {
+        val entry = JournalEntryEntity(
+            title = title.trim(),
+            body = body.trim(),
+            date = date,
+            mood = mood?.trim()?.ifBlank { null }
+        )
+        journalDao.upsertEntry(entry)
+    }
+
+    suspend fun updateJournalEntry(entry: JournalEntryEntity) {
+        journalDao.updateEntry(entry)
+    }
+
+    suspend fun deleteJournalEntry(entry: JournalEntryEntity) {
+        journalDao.deleteEntry(entry)
+    }
 
     suspend fun addHabit(
         name: String,
@@ -24,7 +82,8 @@ class HabitRepository(
         reminderTime: LocalTime?,
         paused: Boolean,
         stepEnabled: Boolean,
-        stepGoal: Int?
+        stepGoal: Int?,
+        goalId: Long?
     ) {
         val habit = HabitEntity(
             name = name.trim(),
@@ -36,7 +95,8 @@ class HabitRepository(
             reminderTime = reminderTime,
             paused = paused,
             stepEnabled = stepEnabled,
-            stepGoal = stepGoal
+            stepGoal = stepGoal,
+            goalId = goalId
         )
         dao.insertHabit(habit)
     }
@@ -58,6 +118,8 @@ class HabitRepository(
             1
         }
         val longest = maxOf(habit.longestStreak, newStreak)
+        val tokenAward = milestoneTokenAward(newStreak)
+        val token = if (tokenAward > 0) dao.getTokenOnce() ?: TokenEntity() else null
 
         database.withTransaction {
             dao.updateHabit(
@@ -68,6 +130,9 @@ class HabitRepository(
                 )
             )
             dao.insertCompletion(HabitCompletionEntity(habitId = habit.id, completionDate = today))
+            if (tokenAward > 0 && token != null) {
+                dao.upsertToken(token.copy(count = token.count + tokenAward))
+            }
         }
         settings.clearPreviousStreak(habit.id)
     }
@@ -141,28 +206,64 @@ class HabitRepository(
         return dao.getCompletionCountForHabitInRange(habitId, start.toString(), end.toString())
     }
 
-    fun tokenFlow(): Flow<TokenEntity?> = dao.getTokenFlow()
-
-    suspend fun syncWeeklyTokens(today: LocalDate, maxTokens: Int = 2) {
-        val token = dao.getTokenOnce() ?: TokenEntity()
-        val lastEarned = token.lastEarnedDate?.let { LocalDate.parse(it) }
-        val weeks = if (lastEarned == null) 1 else (ChronoUnit.DAYS.between(lastEarned, today) / 7).toInt()
-        if (weeks <= 0) return
-
-        val newCount = (token.count + weeks).coerceAtMost(maxTokens)
-        dao.upsertToken(token.copy(count = newCount, lastEarnedDate = today.toString()))
+    suspend fun completedHabitIdsForDate(date: LocalDate): List<Long> {
+        return dao.getCompletedHabitIdsForDate(date.toString())
     }
 
-    suspend fun addToken(maxTokens: Int = 2) {
-        val token = dao.getTokenOnce() ?: TokenEntity()
-        val newCount = (token.count + 1).coerceAtMost(maxTokens)
-        dao.upsertToken(token.copy(count = newCount))
+    fun tokenFlow(): Flow<TokenEntity?> = dao.getTokenFlow()
+
+    private fun milestoneTokenAward(streak: Int): Int {
+        return when (streak) {
+            7 -> 1
+            30 -> 3
+            100 -> 10
+            else -> 0
+        }
     }
 
     fun isScheduledForDay(habit: HabitEntity, date: LocalDate): Boolean {
         val scheduled = habit.scheduledDays
         if (scheduled.isEmpty()) return true
         return scheduled.contains(date.dayOfWeek.value)
+    }
+
+    suspend fun goalProgressPercent(goal: GoalEntity, today: LocalDate): Int {
+        val habits = dao.getHabitsByGoalId(goal.goalId)
+        if (habits.isEmpty()) return 0
+
+        val startDate = goal.startDate
+        val totalPercent = habits.sumOf { habit ->
+            val totalOccurrences = scheduledOccurrencesInRange(habit, startDate, today)
+            if (totalOccurrences == 0) return@sumOf 0.0
+            val completed = dao.getCompletionCountForHabitInRange(
+                habit.id,
+                startDate.toString(),
+                today.toString()
+            )
+            completed.toDouble() / totalOccurrences.toDouble()
+        }
+
+        val average = (totalPercent / habits.size.toDouble()).coerceIn(0.0, 1.0)
+        return (average * 100).toInt()
+    }
+
+    private fun scheduledOccurrencesInRange(
+        habit: HabitEntity,
+        start: LocalDate,
+        end: LocalDate
+    ): Int {
+        if (end.isBefore(start)) return 0
+        val scheduled = habit.scheduledDays
+        val daysBetween = ChronoUnit.DAYS.between(start, end).toInt()
+        if (scheduled.isEmpty()) return daysBetween + 1
+
+        var count = 0
+        var date = start
+        repeat(daysBetween + 1) {
+            if (scheduled.contains(date.dayOfWeek.value)) count += 1
+            date = date.plusDays(1)
+        }
+        return count
     }
 
     private fun previousScheduledDate(habit: HabitEntity, today: LocalDate): LocalDate? {

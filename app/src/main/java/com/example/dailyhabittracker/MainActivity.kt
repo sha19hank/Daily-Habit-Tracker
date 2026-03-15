@@ -7,18 +7,34 @@ import androidx.activity.viewModels
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.example.dailyhabittracker.ui.screens.AddHabitScreen
 import com.example.dailyhabittracker.ui.screens.CalendarScreen
 import com.example.dailyhabittracker.ui.screens.HomeScreen
+import com.example.dailyhabittracker.ui.screens.JournalScreen
 import com.example.dailyhabittracker.ui.screens.SettingsScreen
 import com.example.dailyhabittracker.ui.screens.StatsScreen
 import com.example.dailyhabittracker.ui.theme.DailyHabitTrackerTheme
 import com.example.dailyhabittracker.viewmodel.HabitViewModel
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.EditNote
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.ShowChart
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.ui.Modifier
+import androidx.navigation.NavDestination.Companion.hierarchy
 
 class MainActivity : ComponentActivity() {
     private val viewModel: HabitViewModel by viewModels()
@@ -40,11 +56,69 @@ private fun AppNavHost(viewModel: HabitViewModel) {
     val context = LocalContext.current
     val adManager = (context.applicationContext as DailyHabitTrackerApp).container.adManager
 
-    NavHost(navController = navController, startDestination = "home") {
-        composable("home") { HomeScreen(navController = navController, viewModel = viewModel, adManager = adManager) }
-        composable("add") { AddHabitScreen(navController = navController, viewModel = viewModel) }
-        composable("stats") { StatsScreen(navController = navController, viewModel = viewModel) }
-        composable("calendar") { CalendarScreen(navController = navController, viewModel = viewModel) }
-        composable("settings") { SettingsScreen(navController = navController, viewModel = viewModel) }
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentRoute = navBackStackEntry?.destination?.route
+    val bottomBarRoutes = remember { setOf("today", "calendar", "journal", "insights", "settings") }
+    val showBottomBar = currentRoute in bottomBarRoutes
+
+    Scaffold(
+        bottomBar = {
+            if (showBottomBar) {
+                BottomNavBar(navController = navController)
+            }
+        }
+    ) { padding ->
+        NavHost(
+            navController = navController,
+            startDestination = "today",
+            modifier = Modifier.padding(padding)
+        ) {
+            composable("today") {
+                HomeScreen(navController = navController, viewModel = viewModel, adManager = adManager)
+            }
+            composable("calendar") { CalendarScreen(navController = navController, viewModel = viewModel) }
+            composable("journal") { JournalScreen(navController = navController, viewModel = viewModel) }
+            composable("insights") { StatsScreen(navController = navController, viewModel = viewModel) }
+            composable("settings") { SettingsScreen(navController = navController, viewModel = viewModel) }
+            composable("add") { AddHabitScreen(navController = navController, viewModel = viewModel) }
+        }
     }
 }
+
+@Composable
+private fun BottomNavBar(navController: NavHostController) {
+    val items = listOf(
+        BottomNavItem("today", "Today", Icons.Filled.CheckCircle),
+        BottomNavItem("calendar", "Calendar", Icons.Filled.DateRange),
+        BottomNavItem("journal", "Journal", Icons.Filled.EditNote),
+        BottomNavItem("insights", "Insights", Icons.Filled.ShowChart),
+        BottomNavItem("settings", "Settings", Icons.Filled.Settings)
+    )
+
+    val navBackStackEntry by navController.currentBackStackEntryAsState()
+    val currentDestination = navBackStackEntry?.destination
+
+    NavigationBar {
+        items.forEach { item ->
+            val selected = currentDestination?.hierarchy?.any { it.route == item.route } == true
+            NavigationBarItem(
+                selected = selected,
+                onClick = {
+                    navController.navigate(item.route) {
+                        popUpTo(navController.graph.startDestinationId) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
+                icon = { androidx.compose.material3.Icon(item.icon, contentDescription = item.label) },
+                label = { Text(item.label) }
+            )
+        }
+    }
+}
+
+private data class BottomNavItem(
+    val route: String,
+    val label: String,
+    val icon: androidx.compose.ui.graphics.vector.ImageVector
+)

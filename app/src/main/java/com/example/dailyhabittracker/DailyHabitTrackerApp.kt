@@ -4,6 +4,7 @@ import android.app.Application
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.os.Build
+import com.example.dailyhabittracker.reminders.GoalDeadlineWorker
 import com.example.dailyhabittracker.reminders.ReminderWorker
 
 class DailyHabitTrackerApp : Application() {
@@ -23,7 +24,13 @@ class DailyHabitTrackerApp : Application() {
             "Habit Reminders",
             NotificationManager.IMPORTANCE_DEFAULT
         )
+        val goalChannel = NotificationChannel(
+            GoalDeadlineWorker.GOAL_CHANNEL,
+            "Goal Deadlines",
+            NotificationManager.IMPORTANCE_DEFAULT
+        )
         val manager = getSystemService(NotificationManager::class.java)
         manager?.createNotificationChannel(channel)
+        manager?.createNotificationChannel(goalChannel)
     }
 }

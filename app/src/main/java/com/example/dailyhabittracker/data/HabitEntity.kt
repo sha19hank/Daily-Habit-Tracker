@@ -18,6 +18,7 @@ data class HabitEntity(
     val paused: Boolean = false,
     val stepEnabled: Boolean = false,
     val stepGoal: Int? = null,
+    val goalId: Long? = null,
     val createdDate: LocalDate = LocalDate.now(),
     val lastCompletedDate: LocalDate? = null,
     val currentStreak: Int = 0,

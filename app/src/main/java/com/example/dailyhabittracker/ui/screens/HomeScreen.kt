@@ -1,12 +1,9 @@
 package com.example.dailyhabittracker.ui.screens
 
-import android.app.Activity
 import android.app.TimePickerDialog
-import android.content.Context
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -17,17 +14,16 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.ShowChart
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material3.Button
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -35,21 +31,20 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
+import kotlinx.coroutines.launch
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.delay
-import java.time.DayOfWeek
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
@@ -79,6 +74,7 @@ fun HomeScreen(
     val stepState by viewModel.stepState.collectAsState()
     val focusMode by viewModel.focusModeEnabled.collectAsState()
     val haptics by viewModel.hapticsEnabled.collectAsState()
+    val activeGoal by viewModel.activeGoal.collectAsState()
     val habitHistory by viewModel.habitHistory.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
@@ -88,75 +84,24 @@ fun HomeScreen(
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
     var selectedHabitId by rememberSaveable { mutableStateOf<Long?>(null) }
-    var showWeekReset by rememberSaveable { mutableStateOf(false) }
+    var quickNote by rememberSaveable { mutableStateOf("") }
 
     val displayHabits by remember(habits, focusMode) {
         derivedStateOf {
             if (!focusMode) habits else habits.filter { viewModel.isScheduledToday(it) }
         }
     }
-
-    LaunchedEffect(Unit) {
-        viewModel.loadRewardedAd(
-            context.applicationContext as android.app.Application,
-            context.getString(R.string.admob_rewarded_id),
-            onFailed = { message ->
-                scope.launch { snackbarHostState.showSnackbar("Ad failed: $message") }
-            }
-        )
+    val scheduledTodayCount by remember(displayHabits, today) {
+        derivedStateOf { displayHabits.count { !it.paused && viewModel.isScheduledToday(it) } }
     }
-
-    LaunchedEffect(today) {
-        if (today.dayOfWeek == DayOfWeek.MONDAY) {
-            showWeekReset = true
-            delay(2000)
-            showWeekReset = false
-        }
+    val completedTodayCount by remember(displayHabits, today) {
+        derivedStateOf { displayHabits.count { it.lastCompletedDate == today && viewModel.isScheduledToday(it) } }
     }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Wordmark() },
-                actions = {
-                    IconButton(onClick = { navController.navigate("calendar") }) {
-                        Icon(imageVector = Icons.Default.DateRange, contentDescription = "Calendar")
-                    }
-                    if (!focusMode) {
-                        IconButton(onClick = { navController.navigate("stats") }) {
-                            Icon(imageVector = Icons.Default.ShowChart, contentDescription = "Stats")
-                        }
-                        IconButton(onClick = { sortExpanded = true }) {
-                            Icon(imageVector = Icons.Default.Sort, contentDescription = "Sort")
-                        }
-                        DropdownMenu(expanded = sortExpanded, onDismissRequest = { sortExpanded = false }) {
-                            DropdownMenuItem(
-                                text = { Text("By name") },
-                                onClick = {
-                                    viewModel.updateSort(SortOption.NAME)
-                                    sortExpanded = false
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("By streak") },
-                                onClick = {
-                                    viewModel.updateSort(SortOption.STREAK)
-                                    sortExpanded = false
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("By last completed") },
-                                onClick = {
-                                    viewModel.updateSort(SortOption.LAST_COMPLETED)
-                                    sortExpanded = false
-                                }
-                            )
-                        }
-                    }
-                    IconButton(onClick = { navController.navigate("settings") }) {
-                        Icon(imageVector = Icons.Default.Settings, contentDescription = "Settings")
-                    }
-                }
+                title = { Wordmark() }
             )
         },
         floatingActionButton = {
@@ -187,55 +132,99 @@ fun HomeScreen(
             contentPadding = PaddingValues(horizontal = 24.dp, vertical = 24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            if (!focusMode) {
-                item(key = "weekReset") {
-                    AnimatedVisibility(
-                        visible = showWeekReset,
-                        enter = fadeIn(),
-                        exit = fadeOut()
+            item(key = "progress") {
+                Surface(tonalElevation = 1.dp, shape = androidx.compose.material3.MaterialTheme.shapes.medium) {
+                    androidx.compose.foundation.layout.Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text(
-                            text = "A new week begins.",
-                            style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.fillMaxWidth(),
-                            textAlign = TextAlign.Center
-                        )
+                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                            Text(
+                                text = "Daily progress",
+                                style = androidx.compose.material3.MaterialTheme.typography.titleMedium
+                            )
+                            Text(
+                                text = "$completedTodayCount / $scheduledTodayCount habits completed",
+                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Box(contentAlignment = Alignment.Center) {
+                            val progress = if (scheduledTodayCount == 0) 0f
+                            else completedTodayCount.toFloat() / scheduledTodayCount.toFloat()
+                            CircularProgressIndicator(progress = progress, strokeWidth = 6.dp)
+                            Text(
+                                text = "${(progress * 100).toInt()}%",
+                                style = androidx.compose.material3.MaterialTheme.typography.labelMedium
+                            )
+                        }
                     }
                 }
             }
+
             if (!focusMode) {
                 item(key = "tokens") {
                     Surface(tonalElevation = 1.dp, shape = androidx.compose.material3.MaterialTheme.shapes.medium) {
-                        androidx.compose.foundation.layout.Row(
+                        Column(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(16.dp),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Text(text = "Recovery tokens: $tokenCount")
-                            Button(
+                            Text(text = "Recovery tokens")
+                            Text(
+                                text = tokenCount.toString(),
+                                style = androidx.compose.material3.MaterialTheme.typography.titleMedium
+                            )
+                            Text(
+                                text = "Earned at 7, 30, and 100-day streaks.",
+                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
+
+            item(key = "habitsHeader") {
+                androidx.compose.foundation.layout.Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "Today's habits",
+                        style = androidx.compose.material3.MaterialTheme.typography.titleMedium
+                    )
+                    if (!focusMode) {
+                        IconButton(onClick = { sortExpanded = true }) {
+                            Icon(imageVector = Icons.Default.Sort, contentDescription = "Sort")
+                        }
+                        DropdownMenu(expanded = sortExpanded, onDismissRequest = { sortExpanded = false }) {
+                            DropdownMenuItem(
+                                text = { Text("By name") },
                                 onClick = {
-                                    val activity = context.findActivity() ?: return@Button
-                                    viewModel.showRewardedAd(
-                                        activity = activity,
-                                        onReward = { viewModel.awardTokenFromAd() },
-                                        onClosed = {
-                                            viewModel.loadRewardedAd(
-                                                context.applicationContext as android.app.Application,
-                                                context.getString(R.string.admob_rewarded_id),
-                                                onFailed = { message ->
-                                                    scope.launch { snackbarHostState.showSnackbar("Ad failed: $message") }
-                                                }
-                                            )
-                                        }
-                                    )
-                                },
-                                enabled = tokenCount < 2
-                            ) {
-                                Text(text = "Earn token")
-                            }
+                                    viewModel.updateSort(SortOption.NAME)
+                                    sortExpanded = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("By streak") },
+                                onClick = {
+                                    viewModel.updateSort(SortOption.STREAK)
+                                    sortExpanded = false
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("By last completed") },
+                                onClick = {
+                                    viewModel.updateSort(SortOption.LAST_COMPLETED)
+                                    sortExpanded = false
+                                }
+                            )
                         }
                     }
                 }
@@ -310,6 +299,90 @@ fun HomeScreen(
                         textAlign = TextAlign.Center
                     )
                 }
+
+                if (activeGoal != null) {
+                    item(key = "activeGoal") {
+                        Surface(tonalElevation = 1.dp, shape = androidx.compose.material3.MaterialTheme.shapes.medium) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Text(
+                                    text = "Active goal",
+                                    style = androidx.compose.material3.MaterialTheme.typography.titleMedium
+                                )
+                                Text(
+                                    text = activeGoal!!.goal.title,
+                                    style = androidx.compose.material3.MaterialTheme.typography.bodyMedium
+                                )
+                                if (!activeGoal!!.goal.description.isNullOrBlank()) {
+                                    Text(
+                                        text = activeGoal!!.goal.description!!,
+                                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Text(
+                                    text = "Progress: ${activeGoal!!.progressPercent}%",
+                                    style = androidx.compose.material3.MaterialTheme.typography.labelMedium
+                                )
+                                if (activeGoal!!.goal.deadline != null) {
+                                    Text(
+                                        text = "Deadline: ${activeGoal!!.goal.deadline}",
+                                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                item(key = "quickJournal") {
+                    Surface(tonalElevation = 1.dp, shape = androidx.compose.material3.MaterialTheme.shapes.medium) {
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "Quick journal entry",
+                                style = androidx.compose.material3.MaterialTheme.typography.titleMedium
+                            )
+                            OutlinedTextField(
+                                value = quickNote,
+                                onValueChange = { quickNote = it },
+                                modifier = Modifier.fillMaxWidth(),
+                                placeholder = { Text("What stood out today?") },
+                                minLines = 3
+                            )
+                            androidx.compose.foundation.layout.Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.End
+                            ) {
+                                Button(
+                                    onClick = {
+                                        val text = quickNote.trim()
+                                        if (text.isNotEmpty()) {
+                                            viewModel.upsertJournalEntry(
+                                                title = "Today",
+                                                body = text,
+                                                date = today,
+                                                mood = null
+                                            )
+                                            quickNote = ""
+                                        }
+                                    }
+                                ) {
+                                    Text("Save")
+                                }
+                            }
+                        }
+                    }
+                }
             }
         }
     }
@@ -355,15 +428,6 @@ private fun BannerAd(
             factory = { adView }
         )
     }
-}
-
-private fun Context.findActivity(): Activity? {
-    var ctx = this
-    while (ctx is android.content.ContextWrapper) {
-        if (ctx is Activity) return ctx
-        ctx = ctx.baseContext
-    }
-    return null
 }
 
 private val reflectionLines = listOf(

@@ -3,6 +3,7 @@ package com.example.dailyhabittracker.ui.screens
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -49,7 +50,11 @@ import java.time.YearMonth
 fun CalendarScreen(navController: NavController, viewModel: HabitViewModel) {
     val month by viewModel.calendarMonth.collectAsState()
     val days by viewModel.calendarDays.collectAsState()
+    val habits by viewModel.habits.collectAsState()
+    val completedIds by viewModel.selectedDayCompletedHabitIds.collectAsState()
+    val journalEntry by viewModel.selectedDayJournalEntry.collectAsState()
     var displayedMonth by remember { mutableStateOf(YearMonth.now()) }
+    var selectedDate by remember { mutableStateOf<LocalDate?>(null) }
 
     if (displayedMonth != month) {
         viewModel.loadCalendar(displayedMonth)
@@ -98,15 +103,78 @@ fun CalendarScreen(navController: NavController, viewModel: HabitViewModel) {
             { targetMonth ->
                 CalendarMonthGrid(
                     month = targetMonth,
-                    days = if (targetMonth == month) days else emptyList()
+                    days = if (targetMonth == month) days else emptyList(),
+                    onDaySelected = { date ->
+                        selectedDate = date
+                        viewModel.loadDayDetail(date)
+                    }
                 )
+            }
+
+            if (selectedDate != null) {
+                val dateLabel = selectedDate.toString()
+                val completedHabits = habits.filter { completedIds.contains(it.id) }
+                Surface(
+                    tonalElevation = 1.dp,
+                    shape = MaterialTheme.shapes.medium,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 24.dp, vertical = 16.dp)
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(text = "Day details", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            text = dateLabel,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        Text(text = "Completed habits", style = MaterialTheme.typography.labelMedium)
+                        if (completedHabits.isEmpty()) {
+                            Text(
+                                text = "No completed habits.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        } else {
+                            completedHabits.forEach { habit ->
+                                Text(text = habit.name, style = MaterialTheme.typography.bodySmall)
+                            }
+                        }
+                        Text(text = "Journal entry", style = MaterialTheme.typography.labelMedium)
+                        if (journalEntry == null) {
+                            Text(
+                                text = "No journal entry.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        } else {
+                            Text(text = journalEntry!!.title, style = MaterialTheme.typography.bodySmall)
+                            if (journalEntry!!.body.isNotBlank()) {
+                                Text(
+                                    text = journalEntry!!.body,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
+                    }
+                }
             }
         }
     }
 }
 
 @Composable
-private fun CalendarMonthGrid(month: YearMonth, days: List<CalendarDayState>) {
+private fun CalendarMonthGrid(
+    month: YearMonth,
+    days: List<CalendarDayState>,
+    onDaySelected: (LocalDate) -> Unit
+) {
     val firstDay = month.atDay(1)
     val startOffset = ((firstDay.dayOfWeek.value + 6) % 7)
     val totalDays = month.lengthOfMonth()
@@ -148,7 +216,8 @@ private fun CalendarMonthGrid(month: YearMonth, days: List<CalendarDayState>) {
                         CalendarDayCell(
                             date = date,
                             state = state,
-                            modifier = Modifier.weight(1f)
+                            modifier = Modifier.weight(1f),
+                            onClick = { onDaySelected(date) }
                         )
                     } else {
                         Spacer(modifier = Modifier.weight(1f).height(44.dp))
@@ -163,7 +232,8 @@ private fun CalendarMonthGrid(month: YearMonth, days: List<CalendarDayState>) {
 private fun CalendarDayCell(
     date: LocalDate,
     state: CalendarDayState?,
-    modifier: Modifier
+    modifier: Modifier,
+    onClick: () -> Unit
 ) {
     val completed = state?.completedCount ?: 0
     val missed = state?.missedScheduled ?: 0
@@ -176,7 +246,8 @@ private fun CalendarDayCell(
     Surface(
         modifier = modifier
             .height(44.dp)
-            .padding(2.dp),
+            .padding(2.dp)
+            .clickable { onClick() },
         color = background,
         tonalElevation = 0.dp,
         shape = MaterialTheme.shapes.small

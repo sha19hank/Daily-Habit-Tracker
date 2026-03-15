@@ -19,6 +19,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.Button
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -30,6 +32,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -59,6 +62,9 @@ fun AddHabitScreen(navController: NavController, viewModel: HabitViewModel) {
     var stepEnabled by remember { mutableStateOf(false) }
     var stepGoal by remember { mutableStateOf("5000") }
     var showError by remember { mutableStateOf(false) }
+    var goalExpanded by remember { mutableStateOf(false) }
+    var selectedGoalId by remember { mutableStateOf<Long?>(null) }
+    val goals by viewModel.goals.collectAsState()
     val context = LocalContext.current
     val activityRecognitionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
@@ -109,6 +115,31 @@ fun AddHabitScreen(navController: NavController, viewModel: HabitViewModel) {
                 label = { Text("Category (optional)") },
                 modifier = Modifier.fillMaxWidth()
             )
+
+            Spacer(modifier = Modifier.height(16.dp))
+            Text(text = "Goal (optional)", style = androidx.compose.material3.MaterialTheme.typography.titleSmall)
+            Button(onClick = { goalExpanded = true }) {
+                val selectedLabel = goals.firstOrNull { it.goalId == selectedGoalId }?.title ?: "No goal"
+                Text(text = selectedLabel)
+            }
+            DropdownMenu(expanded = goalExpanded, onDismissRequest = { goalExpanded = false }) {
+                DropdownMenuItem(
+                    text = { Text("No goal") },
+                    onClick = {
+                        selectedGoalId = null
+                        goalExpanded = false
+                    }
+                )
+                goals.forEach { goal ->
+                    DropdownMenuItem(
+                        text = { Text(goal.title) },
+                        onClick = {
+                            selectedGoalId = goal.goalId
+                            goalExpanded = false
+                        }
+                    )
+                }
+            }
 
             Spacer(modifier = Modifier.height(24.dp))
             Text(text = "Schedule", style = androidx.compose.material3.MaterialTheme.typography.titleSmall)
@@ -218,7 +249,8 @@ fun AddHabitScreen(navController: NavController, viewModel: HabitViewModel) {
                         reminderTime = if (reminderEnabled) reminderTime else null,
                         paused = false,
                         stepEnabled = stepEnabled,
-                        stepGoal = stepGoal.toIntOrNull()
+                        stepGoal = stepGoal.toIntOrNull(),
+                        goalId = selectedGoalId
                     )
                     navController.popBackStack()
                 }
