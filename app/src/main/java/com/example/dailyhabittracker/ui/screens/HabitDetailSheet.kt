@@ -12,6 +12,8 @@ import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
@@ -28,8 +30,12 @@ fun HabitDetailSheet(
     history: HabitHistory?,
     stepsToday: Int,
     stepSupported: Boolean,
+    canRestore: Boolean,
     onDismiss: () -> Unit,
-    onTogglePause: () -> Unit
+    onTogglePause: () -> Unit,
+    onRestore: () -> Unit,
+    onEnableReminder: () -> Unit,
+    onDisableReminder: () -> Unit
 ) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
@@ -91,6 +97,20 @@ fun HabitDetailSheet(
             }
 
             Surface(tonalElevation = 1.dp, shape = MaterialTheme.shapes.medium) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(text = "Streak recovery", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        text = if (canRestore) "Use a token to restore your streak." else "No tokens available.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Button(onClick = onRestore, enabled = canRestore) {
+                        Text("Restore streak")
+                    }
+                }
+            }
+
+            Surface(tonalElevation = 1.dp, shape = MaterialTheme.shapes.medium) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(text = "Reminder", style = MaterialTheme.typography.titleMedium)
                     Text(
@@ -98,6 +118,15 @@ fun HabitDetailSheet(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    if (habit.reminderEnabled) {
+                        OutlinedButton(onClick = onDisableReminder) {
+                            Text("Disable reminder")
+                        }
+                    } else {
+                        OutlinedButton(onClick = onEnableReminder) {
+                            Text("Enable reminder")
+                        }
+                    }
                 }
             }
 

@@ -26,13 +26,16 @@ import com.example.dailyhabittracker.viewmodel.HabitViewModel
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.EditNote
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.ShowChart
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
+import androidx.compose.material3.Icon
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavDestination.Companion.hierarchy
 
@@ -60,8 +63,26 @@ private fun AppNavHost(viewModel: HabitViewModel) {
     val currentRoute = navBackStackEntry?.destination?.route
     val bottomBarRoutes = remember { setOf("today", "calendar", "journal", "insights", "settings") }
     val showBottomBar = currentRoute in bottomBarRoutes
+    val showFab = currentRoute == "today" || currentRoute == "journal"
 
     Scaffold(
+        floatingActionButton = {
+            if (showFab) {
+                val isJournal = currentRoute == "journal"
+                FloatingActionButton(onClick = {
+                    if (isJournal) {
+                        viewModel.openJournalEditor()
+                    } else {
+                        navController.navigate("add")
+                    }
+                }) {
+                    Icon(
+                        imageVector = if (isJournal) Icons.Filled.EditNote else Icons.Filled.Add,
+                        contentDescription = if (isJournal) "New journal entry" else "Add habit"
+                    )
+                }
+            }
+        },
         bottomBar = {
             if (showBottomBar) {
                 BottomNavBar(navController = navController)

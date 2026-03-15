@@ -11,13 +11,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -26,10 +22,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -46,25 +42,23 @@ fun JournalScreen(navController: NavController, viewModel: HabitViewModel) {
     val entries by viewModel.journalEntries.collectAsState()
     val context = LocalContext.current
 
-    var showEditor by remember { mutableStateOf(false) }
+    val showEditor by viewModel.showJournalEditor.collectAsState()
     var title by rememberSaveable { mutableStateOf("") }
     var body by rememberSaveable { mutableStateOf("") }
     var mood by rememberSaveable { mutableStateOf("") }
     var entryDate by rememberSaveable { mutableStateOf(LocalDate.now()) }
 
-    Scaffold(
-        topBar = { TopAppBar(title = { Text("Journal") }) },
-        floatingActionButton = {
-            FloatingActionButton(onClick = {
-                title = ""
-                body = ""
-                mood = ""
-                entryDate = LocalDate.now()
-                showEditor = true
-            }) {
-                Icon(imageVector = Icons.Default.Add, contentDescription = "Add entry")
-            }
+    LaunchedEffect(showEditor) {
+        if (showEditor) {
+            title = ""
+            body = ""
+            mood = ""
+            entryDate = LocalDate.now()
         }
+    }
+
+    Scaffold(
+        topBar = { TopAppBar(title = { Text("Journal") }) }
     ) { padding ->
         if (entries.isEmpty()) {
             Column(
@@ -122,7 +116,7 @@ fun JournalScreen(navController: NavController, viewModel: HabitViewModel) {
 
     if (showEditor) {
         AlertDialog(
-            onDismissRequest = { showEditor = false },
+            onDismissRequest = { viewModel.closeJournalEditor() },
             confirmButton = {
                 Button(
                     onClick = {
@@ -133,7 +127,7 @@ fun JournalScreen(navController: NavController, viewModel: HabitViewModel) {
                                 date = entryDate,
                                 mood = mood.ifBlank { null }
                             )
-                            showEditor = false
+                            viewModel.closeJournalEditor()
                         }
                     }
                 ) {
@@ -141,7 +135,7 @@ fun JournalScreen(navController: NavController, viewModel: HabitViewModel) {
                 }
             },
             dismissButton = {
-                TextButton(onClick = { showEditor = false }) { Text("Cancel") }
+                TextButton(onClick = { viewModel.closeJournalEditor() }) { Text("Cancel") }
             },
             title = { Text("New entry") },
             text = {

@@ -10,11 +10,8 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -48,6 +45,7 @@ fun StatsScreen(navController: NavController, viewModel: HabitViewModel) {
     val focusMode by viewModel.focusModeEnabled.collectAsState()
     val activeGoal by viewModel.activeGoal.collectAsState()
     val goals by viewModel.goals.collectAsState()
+    val goalProgress by viewModel.goalProgress.collectAsState()
 
     val context = LocalContext.current
     var showGoalEditor by remember { mutableStateOf(false) }
@@ -65,20 +63,6 @@ fun StatsScreen(navController: NavController, viewModel: HabitViewModel) {
             TopAppBar(
                 title = { Text("Insights") }
             )
-        },
-        floatingActionButton = {
-            FloatingActionButton(onClick = {
-                goalTitle = ""
-                goalDescription = ""
-                goalStartDate = LocalDate.now()
-                goalDeadline = null
-                showGoalEditor = true
-            }) {
-                androidx.compose.material3.Icon(
-                    imageVector = Icons.Default.Add,
-                    contentDescription = "Add goal"
-                )
-            }
         }
     ) { padding ->
         Column(
@@ -102,6 +86,17 @@ fun StatsScreen(navController: NavController, viewModel: HabitViewModel) {
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
+                        Button(
+                            onClick = {
+                                goalTitle = ""
+                                goalDescription = ""
+                                goalStartDate = LocalDate.now()
+                                goalDeadline = null
+                                showGoalEditor = true
+                            }
+                        ) {
+                            Text("Create Goal")
+                        }
                     } else {
                         goals.forEach { goal ->
                             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -109,6 +104,12 @@ fun StatsScreen(navController: NavController, viewModel: HabitViewModel) {
                                 val deadline = goal.deadline?.toString() ?: "No deadline"
                                 Text(
                                     text = deadline,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                                val progress = goalProgress[goal.goalId] ?: 0
+                                Text(
+                                    text = "Progress: $progress%",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )

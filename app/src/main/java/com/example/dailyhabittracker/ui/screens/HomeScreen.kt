@@ -5,22 +5,24 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.filled.Sort
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -53,7 +55,6 @@ import androidx.navigation.NavController
 import com.example.dailyhabittracker.R
 import com.example.dailyhabittracker.ads.AdManager
 import com.example.dailyhabittracker.ui.components.HabitCard
-import com.example.dailyhabittracker.ui.components.Wordmark
 import com.example.dailyhabittracker.ui.screens.HabitDetailSheet
 import com.example.dailyhabittracker.viewmodel.HabitViewModel
 import com.example.dailyhabittracker.viewmodel.SortOption
@@ -101,13 +102,18 @@ fun HomeScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Wordmark() }
+                title = { Text("Daily Habit Tracker") },
+                actions = {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(
+                            imageVector = Icons.Filled.Star,
+                            contentDescription = "Tokens"
+                        )
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text(text = tokenCount.toString())
+                    }
+                }
             )
-        },
-        floatingActionButton = {
-            FloatingActionButton(onClick = { navController.navigate("add") }) {
-                Icon(imageVector = Icons.Default.Add, contentDescription = "Add Habit")
-            }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
@@ -165,8 +171,8 @@ fun HomeScreen(
                 }
             }
 
-            if (!focusMode) {
-                item(key = "tokens") {
+            if (activeGoal != null) {
+                item(key = "activeGoal") {
                     Surface(tonalElevation = 1.dp, shape = androidx.compose.material3.MaterialTheme.shapes.medium) {
                         Column(
                             modifier = Modifier
@@ -174,16 +180,25 @@ fun HomeScreen(
                                 .padding(16.dp),
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
-                            Text(text = "Recovery tokens")
                             Text(
-                                text = tokenCount.toString(),
+                                text = "Active goal",
                                 style = androidx.compose.material3.MaterialTheme.typography.titleMedium
                             )
                             Text(
-                                text = "Earned at 7, 30, and 100-day streaks.",
-                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                                text = activeGoal!!.goal.title,
+                                style = androidx.compose.material3.MaterialTheme.typography.bodyMedium
                             )
+                            Text(
+                                text = "Progress: ${activeGoal!!.progressPercent}%",
+                                style = androidx.compose.material3.MaterialTheme.typography.labelMedium
+                            )
+                            if (activeGoal!!.goal.deadline != null) {
+                                Text(
+                                    text = "Deadline: ${activeGoal!!.goal.deadline}",
+                                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
                         }
                     }
                 }
@@ -247,9 +262,6 @@ fun HomeScreen(
                     habit = habit,
                     today = today,
                     isScheduledToday = viewModel.isScheduledToday(habit),
-                    canRestore = tokenCount > 0,
-                    stepSupported = stepState.supported,
-                    stepsToday = stepState.stepsToday,
                     onClick = {
                         selectedHabitId = habit.id
                         viewModel.loadHabitHistory(habit.id)
@@ -259,28 +271,7 @@ fun HomeScreen(
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         }
                         viewModel.markCompleted(habit)
-                    },
-                    onRestore = {
-                        viewModel.tryRestoreStreak(habit) { restored ->
-                            if (!restored) {
-                                scope.launch { snackbarHostState.showSnackbar("No tokens available") }
-                            }
-                        }
-                    },
-                    onTogglePause = { viewModel.togglePaused(habit) },
-                    onEnableReminder = {
-                        val initial = habit.reminderTime ?: LocalTime.of(9, 0)
-                        TimePickerDialog(
-                            context,
-                            { _, hour, minute ->
-                                viewModel.updateReminder(habit, true, LocalTime.of(hour, minute))
-                            },
-                            initial.hour,
-                            initial.minute,
-                            false
-                        ).show()
-                    },
-                    onDisableReminder = { viewModel.updateReminder(habit, false, null) }
+                    }
                 )
             }
 
@@ -298,46 +289,6 @@ fun HomeScreen(
                         color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                         textAlign = TextAlign.Center
                     )
-                }
-
-                if (activeGoal != null) {
-                    item(key = "activeGoal") {
-                        Surface(tonalElevation = 1.dp, shape = androidx.compose.material3.MaterialTheme.shapes.medium) {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(16.dp),
-                                verticalArrangement = Arrangement.spacedBy(6.dp)
-                            ) {
-                                Text(
-                                    text = "Active goal",
-                                    style = androidx.compose.material3.MaterialTheme.typography.titleMedium
-                                )
-                                Text(
-                                    text = activeGoal!!.goal.title,
-                                    style = androidx.compose.material3.MaterialTheme.typography.bodyMedium
-                                )
-                                if (!activeGoal!!.goal.description.isNullOrBlank()) {
-                                    Text(
-                                        text = activeGoal!!.goal.description!!,
-                                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                                Text(
-                                    text = "Progress: ${activeGoal!!.progressPercent}%",
-                                    style = androidx.compose.material3.MaterialTheme.typography.labelMedium
-                                )
-                                if (activeGoal!!.goal.deadline != null) {
-                                    Text(
-                                        text = "Deadline: ${activeGoal!!.goal.deadline}",
-                                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
-                                    )
-                                }
-                            }
-                        }
-                    }
                 }
 
                 item(key = "quickJournal") {
@@ -395,7 +346,28 @@ fun HomeScreen(
             stepsToday = stepState.stepsToday,
             stepSupported = stepState.supported,
             onDismiss = { selectedHabitId = null },
-            onTogglePause = { viewModel.togglePaused(selectedHabit) }
+            onTogglePause = { viewModel.togglePaused(selectedHabit) },
+            canRestore = tokenCount > 0,
+            onRestore = {
+                viewModel.tryRestoreStreak(selectedHabit) { restored ->
+                    if (!restored) {
+                        scope.launch { snackbarHostState.showSnackbar("No tokens available") }
+                    }
+                }
+            },
+            onEnableReminder = {
+                val initial = selectedHabit.reminderTime ?: LocalTime.of(9, 0)
+                TimePickerDialog(
+                    context,
+                    { _, hour, minute ->
+                        viewModel.updateReminder(selectedHabit, true, LocalTime.of(hour, minute))
+                    },
+                    initial.hour,
+                    initial.minute,
+                    false
+                ).show()
+            },
+            onDisableReminder = { viewModel.updateReminder(selectedHabit, false, null) }
         )
     }
 }

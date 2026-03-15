@@ -73,11 +73,17 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
     private val _activeGoal = MutableStateFlow<ActiveGoalState?>(null)
     val activeGoal: StateFlow<ActiveGoalState?> = _activeGoal.asStateFlow()
 
+    private val _goalProgress = MutableStateFlow<Map<Long, Int>>(emptyMap())
+    val goalProgress: StateFlow<Map<Long, Int>> = _goalProgress.asStateFlow()
+
     private val _selectedDayCompletedHabitIds = MutableStateFlow<List<Long>>(emptyList())
     val selectedDayCompletedHabitIds: StateFlow<List<Long>> = _selectedDayCompletedHabitIds.asStateFlow()
 
     private val _selectedDayJournalEntry = MutableStateFlow<JournalEntryEntity?>(null)
     val selectedDayJournalEntry: StateFlow<JournalEntryEntity?> = _selectedDayJournalEntry.asStateFlow()
+
+    private val _showJournalEditor = MutableStateFlow(false)
+    val showJournalEditor: StateFlow<Boolean> = _showJournalEditor.asStateFlow()
 
     val darkModeEnabled: StateFlow<Boolean> = settings.darkModeEnabled()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
@@ -121,9 +127,14 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
                 val active = selectActiveGoal(goals, today)
                 if (active == null) {
                     _activeGoal.value = null
+                    _goalProgress.value = emptyMap()
                 } else {
                     val progress = repository.goalProgressPercent(active, today)
                     _activeGoal.value = ActiveGoalState(active, progress)
+                    val progressMap = goals.associate { goal ->
+                        goal.goalId to repository.goalProgressPercent(goal, today)
+                    }
+                    _goalProgress.value = progressMap
                 }
             }
         }
@@ -291,6 +302,14 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
             _selectedDayCompletedHabitIds.value = completed
             _selectedDayJournalEntry.value = entry
         }
+    }
+
+    fun openJournalEditor() {
+        _showJournalEditor.value = true
+    }
+
+    fun closeJournalEditor() {
+        _showJournalEditor.value = false
     }
 
     fun loadHabitHistory(habitId: Long) {
