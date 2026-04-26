@@ -10,14 +10,14 @@ import kotlinx.coroutines.flow.Flow
 
 @Dao
 interface JournalDao {
-    @Query("SELECT * FROM journal_entries ORDER BY date DESC")
+    @Query("SELECT * FROM journal_entries ORDER BY timestamp DESC")
     fun getEntries(): Flow<List<JournalEntryEntity>>
 
-    @Query("SELECT * FROM journal_entries ORDER BY date DESC")
+    @Query("SELECT * FROM journal_entries ORDER BY timestamp DESC")
     suspend fun getEntriesOnce(): List<JournalEntryEntity>
 
-    @Query("SELECT * FROM journal_entries WHERE date = :date LIMIT 1")
-    suspend fun getEntryByDate(date: String): JournalEntryEntity?
+    @Query("SELECT * FROM journal_entries WHERE date = :date ORDER BY timestamp DESC")
+    suspend fun getEntriesByDate(date: String): List<JournalEntryEntity>
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertEntry(entry: JournalEntryEntity): Long

@@ -52,7 +52,7 @@ fun CalendarScreen(navController: NavController, viewModel: HabitViewModel) {
     val days by viewModel.calendarDays.collectAsState()
     val habits by viewModel.habits.collectAsState()
     val completedIds by viewModel.selectedDayCompletedHabitIds.collectAsState()
-    val journalEntry by viewModel.selectedDayJournalEntry.collectAsState()
+    val journalEntries by viewModel.selectedDayJournalEntries.collectAsState()
     var displayedMonth by remember { mutableStateOf(YearMonth.now()) }
     var selectedDate by remember { mutableStateOf<LocalDate?>(null) }
 
@@ -146,20 +146,23 @@ fun CalendarScreen(navController: NavController, viewModel: HabitViewModel) {
                             }
                         }
                         Text(text = "Journal entry", style = MaterialTheme.typography.labelMedium)
-                        if (journalEntry == null) {
+                        if (journalEntries.isEmpty()) {
                             Text(
                                 text = "No journal entry.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         } else {
-                            Text(text = journalEntry!!.title, style = MaterialTheme.typography.bodySmall)
-                            if (journalEntry!!.body.isNotBlank()) {
-                                Text(
-                                    text = journalEntry!!.body,
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                            journalEntries.forEach { entry ->
+                                Text(text = entry.title, style = MaterialTheme.typography.bodySmall)
+                                if (entry.body.isNotBlank()) {
+                                    Text(
+                                        text = entry.body,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
                             }
                         }
                     }
@@ -243,6 +246,9 @@ private fun CalendarDayCell(
         else -> Color.Transparent
     }
 
+    val isToday = date == LocalDate.now()
+    val border = if (isToday) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null
+
     Surface(
         modifier = modifier
             .height(44.dp)
@@ -250,7 +256,8 @@ private fun CalendarDayCell(
             .clickable { onClick() },
         color = background,
         tonalElevation = 0.dp,
-        shape = MaterialTheme.shapes.small
+        shape = MaterialTheme.shapes.small,
+        border = border
     ) {
         Column(
             modifier = Modifier.fillMaxSize(),
@@ -258,20 +265,28 @@ private fun CalendarDayCell(
             verticalArrangement = Arrangement.Center
         ) {
             Text(text = date.dayOfMonth.toString(), style = MaterialTheme.typography.bodySmall)
-            if (completed > 0) {
-                Spacer(modifier = Modifier.height(2.dp))
-                Surface(
-                    color = MaterialTheme.colorScheme.secondary,
-                    modifier = Modifier.size(6.dp),
-                    shape = MaterialTheme.shapes.small
-                ) {}
-            } else if (missed > 0) {
-                Spacer(modifier = Modifier.height(2.dp))
-                Surface(
-                    color = MaterialTheme.colorScheme.error,
-                    modifier = Modifier.size(6.dp),
-                    shape = MaterialTheme.shapes.small
-                ) {}
+            Spacer(modifier = Modifier.height(2.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                if (completed > 0) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(6.dp),
+                        shape = MaterialTheme.shapes.small
+                    ) {}
+                } else if (missed > 0) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.size(6.dp),
+                        shape = MaterialTheme.shapes.small
+                    ) {}
+                }
+                if ((state?.journalCount ?: 0) > 0) {
+                    Surface(
+                        color = MaterialTheme.colorScheme.tertiary,
+                        modifier = Modifier.size(6.dp),
+                        shape = MaterialTheme.shapes.small
+                    ) {}
+                }
             }
         }
     }

@@ -1,7 +1,6 @@
 package com.example.dailyhabittracker
 
 import android.content.Context
-import com.example.dailyhabittracker.ads.AdManager
 import com.example.dailyhabittracker.data.HabitDatabase
 import com.example.dailyhabittracker.data.HabitRepository
 import com.example.dailyhabittracker.data.SettingsRepository
@@ -20,7 +19,6 @@ class AppContainer(context: Context) {
         database.journalDao(),
         settingsRepository
     )
-    val adManager: AdManager = AdManager(context)
     val settings: SettingsRepository = settingsRepository
     val reminderScheduler: ReminderWorkScheduler = ReminderWorkScheduler(context, database.habitDao())
     val goalDeadlineScheduler: GoalDeadlineScheduler = GoalDeadlineScheduler(context, database.goalDao())

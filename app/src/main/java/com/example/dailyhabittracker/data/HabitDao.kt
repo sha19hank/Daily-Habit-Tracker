@@ -19,6 +19,9 @@ interface HabitDao {
     @Query("SELECT * FROM habits WHERE goalId = :goalId ORDER BY createdDate DESC")
     suspend fun getHabitsByGoalId(goalId: Long): List<HabitEntity>
 
+    @Query("UPDATE habits SET goalId = null WHERE goalId = :goalId")
+    suspend fun clearGoalIdForHabits(goalId: Long)
+
     @Query("SELECT * FROM habits WHERE id = :id")
     suspend fun getHabitById(id: Long): HabitEntity?
 

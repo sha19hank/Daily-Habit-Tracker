@@ -17,12 +17,13 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Star
-import androidx.compose.material.icons.filled.Sort
+import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -33,7 +34,6 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -43,6 +43,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.navigation.NavController
 import kotlinx.coroutines.launch
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -51,15 +52,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavController
 import com.example.dailyhabittracker.R
-import com.example.dailyhabittracker.ads.AdManager
 import com.example.dailyhabittracker.ui.components.HabitCard
-import com.example.dailyhabittracker.ui.screens.HabitDetailSheet
 import com.example.dailyhabittracker.viewmodel.HabitViewModel
 import com.example.dailyhabittracker.viewmodel.SortOption
-import com.google.android.gms.ads.AdSize
-import com.google.android.gms.ads.AdView
 import java.time.LocalDate
 import java.time.LocalTime
 
@@ -67,8 +63,7 @@ import java.time.LocalTime
 @OptIn(ExperimentalMaterial3Api::class)
 fun HomeScreen(
     navController: NavController,
-    viewModel: HabitViewModel,
-    adManager: AdManager
+    viewModel: HabitViewModel
 ) {
     val habits by viewModel.habits.collectAsState()
     val tokenCount by viewModel.tokenCount.collectAsState()
@@ -76,7 +71,7 @@ fun HomeScreen(
     val focusMode by viewModel.focusModeEnabled.collectAsState()
     val haptics by viewModel.hapticsEnabled.collectAsState()
     val activeGoal by viewModel.activeGoal.collectAsState()
-    val habitHistory by viewModel.habitHistory.collectAsState()
+    val goals by viewModel.goals.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
     val listState = rememberLazyListState()
@@ -84,7 +79,6 @@ fun HomeScreen(
     var sortExpanded by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
-    var selectedHabitId by rememberSaveable { mutableStateOf<Long?>(null) }
     var quickNote by rememberSaveable { mutableStateOf("") }
 
     val displayHabits by remember(habits, focusMode) {
@@ -105,6 +99,12 @@ fun HomeScreen(
                 title = { Text("Daily Habit Tracker") },
                 actions = {
                     Row(verticalAlignment = Alignment.CenterVertically) {
+                        FilterChip(
+                            selected = focusMode,
+                            onClick = { viewModel.setFocusMode(!focusMode) },
+                            label = { Text("Focus") }
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
                         Icon(
                             imageVector = Icons.Filled.Star,
                             contentDescription = "Tokens"
@@ -116,19 +116,6 @@ fun HomeScreen(
             )
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
-        bottomBar = {
-            if (!focusMode) {
-                BannerAd(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    adManager = adManager,
-                    onFailed = { message ->
-                        scope.launch { snackbarHostState.showSnackbar("Ad failed: $message") }
-                    }
-                )
-            }
-        }
     ) { padding ->
         LazyColumn(
             modifier = Modifier
@@ -138,6 +125,13 @@ fun HomeScreen(
             contentPadding = PaddingValues(horizontal = 24.dp, vertical = 24.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            item(key = "loaded") {
+                Text(
+                    text = "App Loaded",
+                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
             item(key = "progress") {
                 Surface(tonalElevation = 1.dp, shape = androidx.compose.material3.MaterialTheme.shapes.medium) {
                     androidx.compose.foundation.layout.Row(
@@ -161,7 +155,7 @@ fun HomeScreen(
                         Box(contentAlignment = Alignment.Center) {
                             val progress = if (scheduledTodayCount == 0) 0f
                             else completedTodayCount.toFloat() / scheduledTodayCount.toFloat()
-                            CircularProgressIndicator(progress = progress, strokeWidth = 6.dp)
+                            CircularProgressIndicator(progress = { progress }, strokeWidth = 6.dp)
                             Text(
                                 text = "${(progress * 100).toInt()}%",
                                 style = androidx.compose.material3.MaterialTheme.typography.labelMedium
@@ -171,34 +165,53 @@ fun HomeScreen(
                 }
             }
 
-            if (activeGoal != null) {
+
+
+            activeGoal?.let { active ->
                 item(key = "activeGoal") {
-                    Surface(tonalElevation = 1.dp, shape = androidx.compose.material3.MaterialTheme.shapes.medium) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
+                    androidx.compose.material3.Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = androidx.compose.material3.CardDefaults.cardColors(
+                            containerColor = androidx.compose.material3.MaterialTheme.colorScheme.primaryContainer
+                        )
+                    ) {
+                        Column(modifier = Modifier.padding(16.dp)) {
                             Text(
-                                text = "Active goal",
-                                style = androidx.compose.material3.MaterialTheme.typography.titleMedium
+                                text = "🎯 Active Goal",
+                                style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
                             )
+                            Spacer(modifier = Modifier.height(4.dp))
                             Text(
-                                text = activeGoal!!.goal.title,
-                                style = androidx.compose.material3.MaterialTheme.typography.bodyMedium
+                                text = active.goal.title,
+                                style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.onPrimaryContainer
                             )
-                            Text(
-                                text = "Progress: ${activeGoal!!.progressPercent}%",
-                                style = androidx.compose.material3.MaterialTheme.typography.labelMedium
-                            )
-                            if (activeGoal!!.goal.deadline != null) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            androidx.compose.foundation.layout.Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
                                 Text(
-                                    text = "Deadline: ${activeGoal!!.goal.deadline}",
+                                    text = "Deadline: ${active.goal.deadline ?: "None"}",
                                     style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = androidx.compose.material3.MaterialTheme.colorScheme.onPrimaryContainer
+                                )
+                                Text(
+                                    text = "${active.progressDetails.overallPercent}%",
+                                    style = androidx.compose.material3.MaterialTheme.typography.labelLarge,
+                                    color = androidx.compose.material3.MaterialTheme.colorScheme.primary
                                 )
                             }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            androidx.compose.material3.LinearProgressIndicator(
+                                progress = { active.progressDetails.overallPercent / 100f },
+                                modifier = Modifier.fillMaxWidth().height(8.dp),
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.primary,
+                                trackColor = androidx.compose.material3.MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.2f),
+                                strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
+                            )
                         }
                     }
                 }
@@ -216,7 +229,7 @@ fun HomeScreen(
                     )
                     if (!focusMode) {
                         IconButton(onClick = { sortExpanded = true }) {
-                            Icon(imageVector = Icons.Default.Sort, contentDescription = "Sort")
+                            Icon(imageVector = Icons.AutoMirrored.Filled.Sort, contentDescription = "Sort")
                         }
                         DropdownMenu(expanded = sortExpanded, onDismissRequest = { sortExpanded = false }) {
                             DropdownMenuItem(
@@ -258,20 +271,49 @@ fun HomeScreen(
             }
 
             items(displayHabits, key = { it.id }, contentType = { "habit" }) { habit ->
+                val goalTitle = remember(habit.goalId, goals) {
+                    goals.firstOrNull { it.goalId == habit.goalId }?.title
+                }
                 HabitCard(
                     habit = habit,
                     today = today,
                     isScheduledToday = viewModel.isScheduledToday(habit),
-                    onClick = {
-                        selectedHabitId = habit.id
-                        viewModel.loadHabitHistory(habit.id)
+                    canFreeze = tokenCount > 0 && habit.currentStreak > 0,
+                    stepSupported = stepState.supported,
+                    stepsToday = stepState.stepsToday,
+                    goalTitle = goalTitle,
+                    onEdit = {
+                        navController.navigate("add?habitId=${habit.id}")
                     },
                     onCompleted = {
                         if (haptics) {
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         }
                         viewModel.markCompleted(habit)
-                    }
+                    },
+                    onFreeze = {
+                        viewModel.tryBuyStreakFreeze(habit) { frozen ->
+                            if (!frozen) {
+                                scope.launch { snackbarHostState.showSnackbar("Could not freeze streak") }
+                            } else {
+                                scope.launch { snackbarHostState.showSnackbar("Streak frozen for 1 missed day!") }
+                            }
+                        }
+                    },
+                    onTogglePause = { viewModel.togglePaused(habit) },
+                    onEnableReminder = {
+                        val initial = habit.reminderTime ?: LocalTime.of(9, 0)
+                        TimePickerDialog(
+                            context,
+                            { _, hour, minute ->
+                                viewModel.updateReminder(habit, true, LocalTime.of(hour, minute))
+                            },
+                            initial.hour,
+                            initial.minute,
+                            false
+                        ).show()
+                    },
+                    onDisableReminder = { viewModel.updateReminder(habit, false, null) }
                 )
             }
 
@@ -338,68 +380,6 @@ fun HomeScreen(
         }
     }
 
-    val selectedHabit = displayHabits.firstOrNull { it.id == selectedHabitId }
-    if (selectedHabit != null) {
-        HabitDetailSheet(
-            habit = selectedHabit,
-            history = habitHistory[selectedHabit.id],
-            stepsToday = stepState.stepsToday,
-            stepSupported = stepState.supported,
-            onDismiss = { selectedHabitId = null },
-            onTogglePause = { viewModel.togglePaused(selectedHabit) },
-            canRestore = tokenCount > 0,
-            onRestore = {
-                viewModel.tryRestoreStreak(selectedHabit) { restored ->
-                    if (!restored) {
-                        scope.launch { snackbarHostState.showSnackbar("No tokens available") }
-                    }
-                }
-            },
-            onEnableReminder = {
-                val initial = selectedHabit.reminderTime ?: LocalTime.of(9, 0)
-                TimePickerDialog(
-                    context,
-                    { _, hour, minute ->
-                        viewModel.updateReminder(selectedHabit, true, LocalTime.of(hour, minute))
-                    },
-                    initial.hour,
-                    initial.minute,
-                    false
-                ).show()
-            },
-            onDisableReminder = { viewModel.updateReminder(selectedHabit, false, null) }
-        )
-    }
-}
-
-@Composable
-private fun BannerAd(
-    modifier: Modifier,
-    adManager: AdManager,
-    onFailed: (String) -> Unit
-) {
-    val context = LocalContext.current
-    val adView = remember {
-        AdView(context).apply {
-            setAdSize(AdSize.BANNER)
-            adUnitId = context.getString(R.string.admob_banner_id)
-            adManager.loadBanner(this, onFailed)
-        }
-    }
-
-    DisposableEffect(Unit) {
-        onDispose { adView.destroy() }
-    }
-    Surface(
-        tonalElevation = 0.dp,
-        color = androidx.compose.material3.MaterialTheme.colorScheme.surface,
-        shape = androidx.compose.material3.MaterialTheme.shapes.medium
-    ) {
-        androidx.compose.ui.viewinterop.AndroidView(
-            modifier = modifier,
-            factory = { adView }
-        )
-    }
 }
 
 private val reflectionLines = listOf(

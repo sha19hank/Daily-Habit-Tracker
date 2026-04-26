@@ -16,11 +16,18 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
@@ -36,7 +43,9 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -47,11 +56,22 @@ import com.example.dailyhabittracker.viewmodel.HabitViewModel
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
+import android.app.DatePickerDialog
+import java.time.LocalDate
 import java.time.LocalTime
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
-fun AddHabitScreen(navController: NavController, viewModel: HabitViewModel) {
+fun AddHabitScreen(
+    navController: NavController,
+    viewModel: HabitViewModel,
+    habitId: Long? = null,
+    prefilledGoalId: Long? = null
+) {
+    val habits by viewModel.habits.collectAsState()
+    val habitToEdit = remember(habitId, habits) {
+        if (habitId != null) habits.firstOrNull { it.id == habitId } else null
+    }
     var name by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
     var category by remember { mutableStateOf("") }
@@ -71,11 +91,34 @@ fun AddHabitScreen(navController: NavController, viewModel: HabitViewModel) {
     ) { granted ->
         stepEnabled = granted
     }
+    
+    var showGoalEditor by remember { mutableStateOf(false) }
+    var goalTitle by rememberSaveable { mutableStateOf("") }
+    var goalDescription by rememberSaveable { mutableStateOf("") }
+    var goalStartDate by rememberSaveable { mutableStateOf(LocalDate.now()) }
+    var goalDeadline by rememberSaveable { mutableStateOf<LocalDate?>(null) }
+
+    LaunchedEffect(habitToEdit, prefilledGoalId) {
+        if (habitToEdit != null) {
+            name = habitToEdit.name
+            description = habitToEdit.description ?: ""
+            category = habitToEdit.category ?: ""
+            selectedDays = habitToEdit.scheduledDays.toSet()
+            reminderEnabled = habitToEdit.reminderEnabled
+            reminderTime = habitToEdit.reminderTime ?: LocalTime.of(9, 0)
+            selectedColor = habitToEdit.color.takeIf { it != 0 } ?: DEFAULT_COLORS.first()
+            stepEnabled = habitToEdit.stepEnabled
+            stepGoal = habitToEdit.stepGoal?.toString() ?: "5000"
+            selectedGoalId = habitToEdit.goalId
+        } else if (prefilledGoalId != null) {
+            selectedGoalId = prefilledGoalId
+        }
+    }
 
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Add Habit") },
+                title = { Text(if (habitId != null) "Edit Habit" else "Add Habit") },
                 navigationIcon = {
                     IconButton(onClick = { navController.popBackStack() }) {
                         Icon(imageVector = Icons.Default.ArrowBack, contentDescription = "Back")
@@ -88,6 +131,8 @@ fun AddHabitScreen(navController: NavController, viewModel: HabitViewModel) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                .verticalScroll(rememberScrollState())
+                .imePadding()
                 .padding(24.dp)
         ) {
             OutlinedTextField(
@@ -117,25 +162,50 @@ fun AddHabitScreen(navController: NavController, viewModel: HabitViewModel) {
             )
 
             Spacer(modifier = Modifier.height(16.dp))
-            Text(text = "Goal (optional)", style = androidx.compose.material3.MaterialTheme.typography.titleSmall)
-            Button(onClick = { goalExpanded = true }) {
+            ExposedDropdownMenuBox(
+                expanded = goalExpanded,
+                onExpandedChange = { goalExpanded = !goalExpanded }
+            ) {
                 val selectedLabel = goals.firstOrNull { it.goalId == selectedGoalId }?.title ?: "No goal"
-                Text(text = selectedLabel)
-            }
-            DropdownMenu(expanded = goalExpanded, onDismissRequest = { goalExpanded = false }) {
-                DropdownMenuItem(
-                    text = { Text("No goal") },
-                    onClick = {
-                        selectedGoalId = null
-                        goalExpanded = false
-                    }
+                OutlinedTextField(
+                    value = selectedLabel,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Goal (optional)") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = goalExpanded) },
+                    modifier = Modifier.menuAnchor().fillMaxWidth(),
+                    colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
                 )
-                goals.forEach { goal ->
+                ExposedDropdownMenu(
+                    expanded = goalExpanded,
+                    onDismissRequest = { goalExpanded = false }
+                ) {
                     DropdownMenuItem(
-                        text = { Text(goal.title) },
+                        text = { Text("No goal") },
                         onClick = {
-                            selectedGoalId = goal.goalId
+                            selectedGoalId = null
                             goalExpanded = false
+                        }
+                    )
+                    goals.forEach { goal ->
+                        DropdownMenuItem(
+                            text = { Text(goal.title) },
+                            onClick = {
+                                selectedGoalId = goal.goalId
+                                goalExpanded = false
+                            }
+                        )
+                    }
+                    HorizontalDivider()
+                    DropdownMenuItem(
+                        text = { Text("Create new goal...") },
+                        onClick = {
+                            goalExpanded = false
+                            goalTitle = ""
+                            goalDescription = ""
+                            goalStartDate = LocalDate.now()
+                            goalDeadline = null
+                            showGoalEditor = true
                         }
                     )
                 }
@@ -236,28 +306,127 @@ fun AddHabitScreen(navController: NavController, viewModel: HabitViewModel) {
             }
             Spacer(modifier = Modifier.height(24.dp))
             Button(onClick = {
-                if (name.isBlank()) {
+                if (name.isBlank() || selectedDays.isEmpty()) {
                     showError = true
                 } else {
-                    viewModel.addHabit(
-                        name = name,
-                        description = description.ifBlank { null },
-                        category = category.ifBlank { null },
-                        color = selectedColor,
-                        scheduledDays = selectedDays.toList().sorted(),
-                        reminderEnabled = reminderEnabled,
-                        reminderTime = if (reminderEnabled) reminderTime else null,
-                        paused = false,
-                        stepEnabled = stepEnabled,
-                        stepGoal = stepGoal.toIntOrNull(),
-                        goalId = selectedGoalId
-                    )
+                    if (habitId != null) {
+                        viewModel.updateHabitFull(
+                            habitId = habitId,
+                            name = name,
+                            description = description.ifBlank { null },
+                            category = category.ifBlank { null },
+                            color = selectedColor,
+                            scheduledDays = selectedDays.toList().sorted(),
+                            reminderEnabled = reminderEnabled,
+                            reminderTime = if (reminderEnabled) reminderTime else null,
+                            paused = habitToEdit?.paused ?: false,
+                            stepEnabled = stepEnabled,
+                            stepGoal = if (stepEnabled) stepGoal.toIntOrNull() else null,
+                            goalId = selectedGoalId
+                        )
+                    } else {
+                        viewModel.addHabit(
+                            name = name,
+                            description = description.ifBlank { null },
+                            category = category.ifBlank { null },
+                            color = selectedColor,
+                            scheduledDays = selectedDays.toList().sorted(),
+                            reminderEnabled = reminderEnabled,
+                            reminderTime = if (reminderEnabled) reminderTime else null,
+                            paused = false,
+                            stepEnabled = stepEnabled,
+                            stepGoal = stepGoal.toIntOrNull(),
+                            goalId = selectedGoalId
+                        )
+                    }
                     navController.popBackStack()
                 }
             }) {
-                Text("Save Habit")
+                Text(if (habitId != null) "Save Changes" else "Save Habit")
             }
         }
+    }
+
+    if (showGoalEditor) {
+        AlertDialog(
+            onDismissRequest = { showGoalEditor = false },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (goalTitle.isNotBlank()) {
+                            viewModel.addGoal(
+                                title = goalTitle,
+                                description = goalDescription.ifBlank { null },
+                                startDate = goalStartDate,
+                                deadline = goalDeadline
+                            ) { newId ->
+                                selectedGoalId = newId
+                            }
+                            showGoalEditor = false
+                        }
+                    }
+                ) {
+                    Text("Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showGoalEditor = false }) { Text("Cancel") }
+            },
+            title = { Text("New goal") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = goalTitle,
+                        onValueChange = { goalTitle = it },
+                        label = { Text("Title") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = goalDescription,
+                        onValueChange = { goalDescription = it },
+                        label = { Text("Description") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    TextButton(
+                        onClick = {
+                            val current = goalStartDate
+                            DatePickerDialog(
+                                context,
+                                { _, year, month, dayOfMonth ->
+                                    goalStartDate = LocalDate.of(year, month + 1, dayOfMonth)
+                                },
+                                current.year,
+                                current.monthValue - 1,
+                                current.dayOfMonth
+                            ).show()
+                        }
+                    ) {
+                        Text("Start: $goalStartDate")
+                    }
+                    TextButton(
+                        onClick = {
+                            val current = goalDeadline ?: LocalDate.now()
+                            DatePickerDialog(
+                                context,
+                                { _, year, month, dayOfMonth ->
+                                    goalDeadline = LocalDate.of(year, month + 1, dayOfMonth)
+                                },
+                                current.year,
+                                current.monthValue - 1,
+                                current.dayOfMonth
+                            ).show()
+                        }
+                    ) {
+                        Text("Deadline: ${goalDeadline ?: "None"}")
+                    }
+                    if (goalDeadline != null) {
+                        TextButton(onClick = { goalDeadline = null }) {
+                            Text("Clear deadline")
+                        }
+                    }
+                }
+            }
+        )
     }
 }
 

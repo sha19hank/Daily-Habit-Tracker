@@ -25,14 +25,14 @@ class HabitRepository(
         description: String?,
         startDate: LocalDate,
         deadline: LocalDate?
-    ) {
+    ): Long {
         val goal = GoalEntity(
             title = title.trim(),
             description = description?.trim()?.ifBlank { null },
             startDate = startDate,
             deadline = deadline
         )
-        goalDao.insertGoal(goal)
+        return goalDao.insertGoal(goal)
     }
 
     suspend fun updateGoal(goal: GoalEntity) {
@@ -40,13 +40,16 @@ class HabitRepository(
     }
 
     suspend fun deleteGoal(goal: GoalEntity) {
-        goalDao.deleteGoal(goal)
+        database.withTransaction {
+            dao.clearGoalIdForHabits(goal.goalId)
+            goalDao.deleteGoal(goal)
+        }
     }
 
     fun getJournalEntries(): Flow<List<JournalEntryEntity>> = journalDao.getEntries()
 
-    suspend fun getJournalEntryByDate(date: LocalDate): JournalEntryEntity? {
-        return journalDao.getEntryByDate(date.toString())
+    suspend fun getJournalEntriesByDate(date: LocalDate): List<JournalEntryEntity> {
+        return journalDao.getEntriesByDate(date.toString())
     }
 
     suspend fun upsertJournalEntry(
@@ -143,33 +146,28 @@ class HabitRepository(
             val lastCompleted = habit.lastCompletedDate
             if (habit.paused) return@forEach
             if (lastCompleted != null && habit.currentStreak > 0 && missedScheduledDay(habit, lastCompleted, today)) {
-                settings.setPreviousStreak(habit.id, habit.currentStreak)
-                dao.updateHabit(habit.copy(currentStreak = 0))
+                if (settings.isStreakFrozen(habit.id)) {
+                    settings.setStreakFrozen(habit.id, false)
+                    val missedDay = previousScheduledDate(habit, today) ?: today.minusDays(1)
+                    dao.updateHabit(habit.copy(lastCompletedDate = missedDay))
+                } else {
+                    settings.setPreviousStreak(habit.id, habit.currentStreak)
+                    dao.updateHabit(habit.copy(currentStreak = 0))
+                }
             }
         }
     }
 
-    suspend fun restoreStreakIfAllowed(habit: HabitEntity, today: LocalDate): Boolean {
-        val previousScheduled = previousScheduledDate(habit, today)
-        if (habit.lastCompletedDate == today) return false
-        if (habit.currentStreak > 0) return false
-        if (habit.lastCompletedDate == null || previousScheduled == null) return false
-        if (!habit.lastCompletedDate.isBefore(previousScheduled)) return false
-
-        val previousStreak = settings.getPreviousStreak(habit.id) ?: return false
-        val restored = habit.copy(
-            currentStreak = previousStreak,
-            lastCompletedDate = previousScheduled
-        )
-
+    suspend fun buyStreakFreeze(habitId: Long): Boolean {
+        if (settings.isStreakFrozen(habitId)) return false
+        
         val token = dao.getTokenOnce() ?: TokenEntity()
         if (token.count <= 0) return false
 
         database.withTransaction {
-            dao.updateHabit(restored)
             dao.upsertToken(token.copy(count = token.count - 1))
         }
-        settings.clearPreviousStreak(habit.id)
+        settings.setStreakFrozen(habitId, true)
         return true
     }
 
@@ -228,23 +226,35 @@ class HabitRepository(
     }
 
     suspend fun goalProgressPercent(goal: GoalEntity, today: LocalDate): Int {
+        val details = goalProgressDetails(goal, today)
+        return details.overallPercent
+    }
+
+    suspend fun goalProgressDetails(goal: GoalEntity, today: LocalDate): GoalProgressDetails {
         val habits = dao.getHabitsByGoalId(goal.goalId)
-        if (habits.isEmpty()) return 0
+        if (habits.isEmpty()) return GoalProgressDetails(0, emptyList())
 
         val startDate = goal.startDate
-        val totalPercent = habits.sumOf { habit ->
-            val totalOccurrences = scheduledOccurrencesInRange(habit, startDate, today)
-            if (totalOccurrences == 0) return@sumOf 0.0
-            val completed = dao.getCompletionCountForHabitInRange(
-                habit.id,
-                startDate.toString(),
-                today.toString()
-            )
-            completed.toDouble() / totalOccurrences.toDouble()
+        val habitProgresses = habits.map { habit ->
+            val totalOccurrences = scheduledOccurrencesInRange(habit, startDate, goal.deadline ?: today)
+            val completed = if (totalOccurrences > 0) {
+                dao.getCompletionCountForHabitInRange(
+                    habit.id,
+                    startDate.toString(),
+                    today.toString()
+                )
+            } else 0
+            
+            val percent = if (totalOccurrences > 0) {
+                (completed.toDouble() / totalOccurrences.toDouble() * 100).toInt().coerceIn(0, 100)
+            } else 0
+            
+            HabitProgress(habit, completed, totalOccurrences, percent)
         }
 
+        val totalPercent = habitProgresses.sumOf { it.percent.toDouble() / 100.0 }
         val average = (totalPercent / habits.size.toDouble()).coerceIn(0.0, 1.0)
-        return (average * 100).toInt()
+        return GoalProgressDetails((average * 100).toInt(), habitProgresses)
     }
 
     private fun scheduledOccurrencesInRange(
@@ -291,3 +301,15 @@ class HabitRepository(
         return false
     }
 }
+
+data class HabitProgress(
+    val habit: HabitEntity,
+    val completed: Int,
+    val expected: Int,
+    val percent: Int
+)
+
+data class GoalProgressDetails(
+    val overallPercent: Int,
+    val habitProgresses: List<HabitProgress>
+)

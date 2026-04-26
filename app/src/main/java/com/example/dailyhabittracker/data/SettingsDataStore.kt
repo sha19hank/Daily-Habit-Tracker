@@ -115,4 +115,17 @@ class SettingsRepository(private val context: Context) {
         val key = stringPreferencesKey("paused_streak_$habitId")
         context.dataStore.edit { it.remove(key) }
     }
+
+    suspend fun setStreakFrozen(habitId: Long, frozen: Boolean) {
+        val key = booleanPreferencesKey("frozen_streak_$habitId")
+        context.dataStore.edit { 
+            if (frozen) it[key] = true else it.remove(key)
+        }
+    }
+
+    suspend fun isStreakFrozen(habitId: Long): Boolean {
+        val key = booleanPreferencesKey("frozen_streak_$habitId")
+        val prefs = context.dataStore.data.first()
+        return prefs[key] ?: false
+    }
 }

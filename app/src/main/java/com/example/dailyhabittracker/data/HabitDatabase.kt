@@ -16,7 +16,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         GoalEntity::class,
         JournalEntryEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -31,7 +31,7 @@ abstract class HabitDatabase : RoomDatabase() {
                 context,
                 HabitDatabase::class.java,
                 "habit_tracker.db"
-            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4).build()
+            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5).build()
         }
     }
 }
@@ -82,5 +82,18 @@ private val MIGRATION_3_4 = object : Migration(3, 4) {
         database.execSQL(
             "CREATE UNIQUE INDEX IF NOT EXISTS index_journal_entries_date ON journal_entries(date)"
         )
+    }
+}
+
+private val MIGRATION_4_5 = object : Migration(4, 5) {
+    override fun migrate(database: SupportSQLiteDatabase) {
+        // Add timestamp column
+        database.execSQL("ALTER TABLE journal_entries ADD COLUMN timestamp INTEGER NOT NULL DEFAULT 0")
+        
+        // SQLite doesn't support DROP INDEX IF EXISTS easily in some versions, but we can drop it.
+        database.execSQL("DROP INDEX IF EXISTS index_journal_entries_date")
+        
+        // Recreate index without UNIQUE constraint
+        database.execSQL("CREATE INDEX IF NOT EXISTS index_journal_entries_date ON journal_entries(date)")
     }
 }

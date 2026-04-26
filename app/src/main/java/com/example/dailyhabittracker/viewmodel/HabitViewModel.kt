@@ -6,6 +6,7 @@ import androidx.lifecycle.viewModelScope
 import com.example.dailyhabittracker.DailyHabitTrackerApp
 import com.example.dailyhabittracker.data.DateCount
 import com.example.dailyhabittracker.data.GoalEntity
+import com.example.dailyhabittracker.data.GoalProgressDetails
 import com.example.dailyhabittracker.data.HabitEntity
 import com.example.dailyhabittracker.data.HabitRepository
 import com.example.dailyhabittracker.data.JournalEntryEntity
@@ -20,6 +21,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -73,17 +75,15 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
     private val _activeGoal = MutableStateFlow<ActiveGoalState?>(null)
     val activeGoal: StateFlow<ActiveGoalState?> = _activeGoal.asStateFlow()
 
-    private val _goalProgress = MutableStateFlow<Map<Long, Int>>(emptyMap())
-    val goalProgress: StateFlow<Map<Long, Int>> = _goalProgress.asStateFlow()
+    private val _goalProgress = MutableStateFlow<Map<Long, GoalProgressDetails>>(emptyMap())
+    val goalProgress: StateFlow<Map<Long, GoalProgressDetails>> = _goalProgress.asStateFlow()
 
     private val _selectedDayCompletedHabitIds = MutableStateFlow<List<Long>>(emptyList())
     val selectedDayCompletedHabitIds: StateFlow<List<Long>> = _selectedDayCompletedHabitIds.asStateFlow()
 
-    private val _selectedDayJournalEntry = MutableStateFlow<JournalEntryEntity?>(null)
-    val selectedDayJournalEntry: StateFlow<JournalEntryEntity?> = _selectedDayJournalEntry.asStateFlow()
+    private val _selectedDayJournalEntries = MutableStateFlow<List<JournalEntryEntity>>(emptyList())
+    val selectedDayJournalEntries: StateFlow<List<JournalEntryEntity>> = _selectedDayJournalEntries.asStateFlow()
 
-    private val _showJournalEditor = MutableStateFlow(false)
-    val showJournalEditor: StateFlow<Boolean> = _showJournalEditor.asStateFlow()
 
     val darkModeEnabled: StateFlow<Boolean> = settings.darkModeEnabled()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
@@ -129,10 +129,10 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
                     _activeGoal.value = null
                     _goalProgress.value = emptyMap()
                 } else {
-                    val progress = repository.goalProgressPercent(active, today)
-                    _activeGoal.value = ActiveGoalState(active, progress)
+                    val progressDetails = repository.goalProgressDetails(active, today)
+                    _activeGoal.value = ActiveGoalState(active, progressDetails)
                     val progressMap = goals.associate { goal ->
-                        goal.goalId to repository.goalProgressPercent(goal, today)
+                        goal.goalId to repository.goalProgressDetails(goal, today)
                     }
                     _goalProgress.value = progressMap
                 }
@@ -171,15 +171,52 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun updateHabitFull(
+        habitId: Long,
+        name: String,
+        description: String?,
+        category: String?,
+        color: Int,
+        scheduledDays: List<Int>,
+        reminderEnabled: Boolean,
+        reminderTime: LocalTime?,
+        paused: Boolean,
+        stepEnabled: Boolean,
+        stepGoal: Int?,
+        goalId: Long?
+    ) {
+        viewModelScope.launch(Dispatchers.IO) {
+            val existing = repository.getHabitsOnce().firstOrNull { it.id == habitId }
+            if (existing != null) {
+                repository.updateHabit(existing.copy(
+                    name = name,
+                    description = description,
+                    category = category,
+                    color = color,
+                    scheduledDays = scheduledDays,
+                    reminderEnabled = reminderEnabled,
+                    reminderTime = reminderTime,
+                    paused = paused,
+                    stepEnabled = stepEnabled,
+                    stepGoal = stepGoal,
+                    goalId = goalId
+                ))
+                reminderScheduler.scheduleNext()
+            }
+        }
+    }
+
     fun addGoal(
         title: String,
         description: String?,
         startDate: LocalDate,
-        deadline: LocalDate?
+        deadline: LocalDate?,
+        onSuccess: ((Long) -> Unit)? = null
     ) {
         viewModelScope.launch(Dispatchers.IO) {
-            repository.addGoal(title, description, startDate, deadline)
+            val id = repository.addGoal(title, description, startDate, deadline)
             goalDeadlineScheduler.scheduleAll()
+            withContext(Dispatchers.Main) { onSuccess?.invoke(id) }
         }
     }
 
@@ -242,14 +279,14 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
             _monthlyCount.value = repository.monthlyCompletionCount(startOfMonth, endOfMonth)
 
             val habits = repository.getHabitsOnce()
-            _insights.value = buildInsights(habits, _weeklySummary.value, startOfWeek, today)
+            _insights.value = buildInsights(habits, _weeklySummary.value, startOfWeek)
         }
     }
 
-    fun tryRestoreStreak(habit: HabitEntity, onResult: (Boolean) -> Unit) {
+    fun tryBuyStreakFreeze(habit: HabitEntity, onResult: (Boolean) -> Unit) {
         viewModelScope.launch(Dispatchers.IO) {
-            val restored = repository.restoreStreakIfAllowed(habit, LocalDate.now())
-            withContext(Dispatchers.Main) { onResult(restored) }
+            val frozen = repository.buyStreakFreeze(habit.id)
+            withContext(Dispatchers.Main) { onResult(frozen) }
         }
     }
 
@@ -280,6 +317,8 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
             val end = month.atEndOfMonth()
             val completions = repository.weeklySummary(start, end)
             val completionMap = completions.associateBy { it.date }
+            val allJournals = repository.getJournalEntries().first()
+            val journalMap = allJournals.groupBy { it.date }
 
             val days = (1..month.lengthOfMonth()).map { day ->
                 val date = month.atDay(day)
@@ -287,7 +326,8 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
                     !it.paused && repository.isScheduledForDay(it, date)
                 }
                 val completedCount = completionMap[date.toString()]?.count ?: 0
-                CalendarDayState(date, completedCount, scheduledCount)
+                val journalCount = journalMap[date]?.size ?: 0
+                CalendarDayState(date, completedCount, scheduledCount, journalCount)
             }
             _calendarMonth.value = month
             _calendarDays.value = days
@@ -298,19 +338,12 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
     fun loadDayDetail(date: LocalDate) {
         viewModelScope.launch(Dispatchers.IO) {
             val completed = repository.completedHabitIdsForDate(date)
-            val entry = repository.getJournalEntryByDate(date)
+            val entries = repository.getJournalEntriesByDate(date)
             _selectedDayCompletedHabitIds.value = completed
-            _selectedDayJournalEntry.value = entry
+            _selectedDayJournalEntries.value = entries
         }
     }
 
-    fun openJournalEditor() {
-        _showJournalEditor.value = true
-    }
-
-    fun closeJournalEditor() {
-        _showJournalEditor.value = false
-    }
 
     fun loadHabitHistory(habitId: Long) {
         viewModelScope.launch(Dispatchers.IO) {
@@ -350,7 +383,7 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
 @androidx.compose.runtime.Immutable
 data class ActiveGoalState(
     val goal: GoalEntity,
-    val progressPercent: Int
+    val progressDetails: GoalProgressDetails
 )
 
 enum class SortOption { NAME, STREAK, LAST_COMPLETED }
@@ -359,7 +392,8 @@ enum class SortOption { NAME, STREAK, LAST_COMPLETED }
 data class CalendarDayState(
     val date: LocalDate,
     val completedCount: Int,
-    val scheduledCount: Int
+    val scheduledCount: Int,
+    val journalCount: Int = 0
 ) {
     val missedScheduled: Int
         get() = (scheduledCount - completedCount).coerceAtLeast(0)
@@ -374,8 +408,7 @@ data class HabitHistory(
 private fun buildInsights(
     habits: List<HabitEntity>,
     weeklySummary: List<DateCount>,
-    startOfWeek: LocalDate,
-    today: LocalDate
+    startOfWeek: LocalDate
 ): List<String> {
     if (habits.isEmpty()) return emptyList()
     val completions = weeklySummary.sumOf { it.count }
@@ -405,17 +438,17 @@ private fun buildInsights(
 private fun selectActiveGoal(goals: List<GoalEntity>, today: LocalDate): GoalEntity? {
     if (goals.isEmpty()) return null
     val withDeadline = goals.filter { it.deadline != null }
-    val upcoming = withDeadline.filter { it.deadline != null && !it.deadline!!.isBefore(today) }
+    val upcoming = withDeadline.filter { it.deadline?.isBefore(today) == false }
     val deadlineSorted = upcoming.ifEmpty { withDeadline }
 
     if (deadlineSorted.isNotEmpty()) {
         return deadlineSorted
             .sortedWith(
                 compareBy<GoalEntity> { it.deadline }
-                    .thenByDescending { it.startDate }
+                    .thenByDescending { it.goalId }
             )
             .first()
     }
 
-    return goals.maxByOrNull { it.startDate }
+    return goals.maxByOrNull { it.goalId }
 }

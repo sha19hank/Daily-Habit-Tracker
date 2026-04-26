@@ -14,6 +14,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -32,24 +33,35 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.navigation.NavController
+import androidx.compose.ui.unit.sp
 import com.example.dailyhabittracker.viewmodel.HabitViewModel
 import java.time.LocalDate
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
-fun JournalScreen(navController: NavController, viewModel: HabitViewModel) {
+fun JournalScreen(
+    viewModel: HabitViewModel,
+    openDialogRequest: Boolean,
+    onDialogRequestConsumed: () -> Unit
+) {
     val entries by viewModel.journalEntries.collectAsState()
     val context = LocalContext.current
 
-    val showEditor by viewModel.showJournalEditor.collectAsState()
+    var showDialog by rememberSaveable { mutableStateOf(false) }
     var title by rememberSaveable { mutableStateOf("") }
     var body by rememberSaveable { mutableStateOf("") }
     var mood by rememberSaveable { mutableStateOf("") }
     var entryDate by rememberSaveable { mutableStateOf(LocalDate.now()) }
 
-    LaunchedEffect(showEditor) {
-        if (showEditor) {
+    LaunchedEffect(openDialogRequest) {
+        if (openDialogRequest) {
+            showDialog = true
+            onDialogRequestConsumed()
+        }
+    }
+
+    LaunchedEffect(showDialog) {
+        if (showDialog) {
             title = ""
             body = ""
             mood = ""
@@ -92,8 +104,9 @@ fun JournalScreen(navController: NavController, viewModel: HabitViewModel) {
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             Text(text = entry.title, style = MaterialTheme.typography.titleMedium)
+                            val timeString = java.text.SimpleDateFormat("hh:mm a", java.util.Locale.getDefault()).format(java.util.Date(entry.timestamp))
                             Text(
-                                text = entry.date.toString(),
+                                text = "${entry.date} at $timeString",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -101,8 +114,16 @@ fun JournalScreen(navController: NavController, viewModel: HabitViewModel) {
                                 Text(text = entry.body, style = MaterialTheme.typography.bodySmall)
                             }
                             if (!entry.mood.isNullOrBlank()) {
+                                val moodEmoji = when (entry.mood) {
+                                    "RAD" -> "😁"
+                                    "GOOD" -> "🙂"
+                                    "MEH" -> "😐"
+                                    "BAD" -> "🙁"
+                                    "AWFUL" -> "😢"
+                                    else -> entry.mood
+                                }
                                 Text(
-                                    text = "Mood: ${entry.mood}",
+                                    text = "Mood: $moodEmoji",
                                     style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -114,9 +135,9 @@ fun JournalScreen(navController: NavController, viewModel: HabitViewModel) {
         }
     }
 
-    if (showEditor) {
+    if (showDialog) {
         AlertDialog(
-            onDismissRequest = { viewModel.closeJournalEditor() },
+            onDismissRequest = { showDialog = false },
             confirmButton = {
                 Button(
                     onClick = {
@@ -127,7 +148,7 @@ fun JournalScreen(navController: NavController, viewModel: HabitViewModel) {
                                 date = entryDate,
                                 mood = mood.ifBlank { null }
                             )
-                            viewModel.closeJournalEditor()
+                            showDialog = false
                         }
                     }
                 ) {
@@ -135,7 +156,7 @@ fun JournalScreen(navController: NavController, viewModel: HabitViewModel) {
                 }
             },
             dismissButton = {
-                TextButton(onClick = { viewModel.closeJournalEditor() }) { Text("Cancel") }
+                TextButton(onClick = { showDialog = false }) { Text("Cancel") }
             },
             title = { Text("New entry") },
             text = {
@@ -153,12 +174,21 @@ fun JournalScreen(navController: NavController, viewModel: HabitViewModel) {
                         modifier = Modifier.fillMaxWidth(),
                         minLines = 4
                     )
-                    OutlinedTextField(
-                        value = mood,
-                        onValueChange = { mood = it },
-                        label = { Text("Mood (optional)") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    Text("Mood", style = MaterialTheme.typography.labelMedium)
+                    val predefinedMoods = listOf("RAD" to "😁", "GOOD" to "🙂", "MEH" to "😐", "BAD" to "🙁", "AWFUL" to "😢")
+                    androidx.compose.foundation.lazy.LazyRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        items(predefinedMoods) { (moodName, emoji) ->
+                            val isSelected = mood == moodName
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { mood = if (isSelected) "" else moodName },
+                                label = { Text(emoji, fontSize = 20.sp) }
+                            )
+                        }
+                    }
                     TextButton(
                         onClick = {
                             val current = entryDate
