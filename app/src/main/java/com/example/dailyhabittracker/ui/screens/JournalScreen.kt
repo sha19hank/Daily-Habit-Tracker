@@ -38,12 +38,13 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
-import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -54,6 +55,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -254,16 +256,28 @@ fun JournalCard(
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
         label = "scale"
     )
+    val isLightMode = MaterialTheme.colorScheme.background.luminance() > 0.5f
 
     Surface(
-        tonalElevation = 1.dp,
+        color = if (isLightMode) Color(0xFFFFFDF9) else MaterialTheme.colorScheme.surface,
+        shadowElevation = if (isLightMode) 0.dp else 1.dp,
+        tonalElevation = if (isLightMode) 0.dp else 1.dp,
         shape = MaterialTheme.shapes.medium,
+        border = if (isLightMode) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline) else null,
         modifier = Modifier
             .fillMaxWidth()
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
             }
+            .then(
+                if (isLightMode) Modifier.shadow(
+                    elevation = 2.dp,
+                    shape = MaterialTheme.shapes.medium,
+                    spotColor = Color(0xFF2A140A).copy(alpha = 0.08f),
+                    ambientColor = Color(0xFF2A140A).copy(alpha = 0.04f)
+                ) else Modifier
+            )
             .clickable(
                 interactionSource = interactionSource,
                 indication = androidx.compose.material.ripple.rememberRipple(),
@@ -384,11 +398,11 @@ fun JournalEditor(
                 modifier = Modifier.fillMaxWidth(),
                 textStyle = MaterialTheme.typography.titleLarge,
                 colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color.Transparent,
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
                     unfocusedContainerColor = Color.Transparent,
                     disabledContainerColor = Color.Transparent,
-                    focusedIndicatorColor = Color.Transparent,
-                    unfocusedIndicatorColor = Color.Transparent,
+                    focusedIndicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                    unfocusedIndicatorColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
                     disabledIndicatorColor = Color.Transparent
                 ),
                 singleLine = true
@@ -403,7 +417,7 @@ fun JournalEditor(
                     .weight(1f),
                 textStyle = MaterialTheme.typography.bodyLarge,
                 colors = TextFieldDefaults.colors(
-                    focusedContainerColor = Color.Transparent,
+                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
                     unfocusedContainerColor = Color.Transparent,
                     disabledContainerColor = Color.Transparent,
                     focusedIndicatorColor = Color.Transparent,

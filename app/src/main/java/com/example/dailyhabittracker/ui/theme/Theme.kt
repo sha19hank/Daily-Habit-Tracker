@@ -11,26 +11,28 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.graphics.Color
 
 private val LightColors = lightColorScheme(
-    primary = PrimaryAmber,
-    onPrimary = OnPrimaryAmber,
-    primaryContainer = PrimaryAmberContainerLight,
-    onPrimaryContainer = OnPrimaryAmberContainerLight,
-    secondary = SecondaryViolet,
-    onSecondary = OnSecondaryViolet,
-    secondaryContainer = SecondaryVioletContainerLight,
-    onSecondaryContainer = OnSecondaryVioletContainerLight,
-    error = ErrorRed,
-    errorContainer = ErrorContainerLight,
-    onErrorContainer = OnErrorContainerLight,
+    primary = LightPrimaryMaroon,
+    onPrimary = Color.White,
+    primaryContainer = LightSurfaceVariant,
+    onPrimaryContainer = LightPrimaryMaroon,
+    secondary = LightSecondaryAmber,
+    onSecondary = Color.White,
+    secondaryContainer = LightSurfaceVariant,
+    onSecondaryContainer = LightSecondaryAmber,
+    error = LightDangerRed,
+    errorContainer = Color(0xFFFDE8E8),
+    onErrorContainer = LightDangerRed,
     background = LightBackground,
     onBackground = LightOnBackground,
     surface = LightSurface,
     onSurface = LightOnBackground,
     surfaceVariant = LightSurfaceVariant,
     onSurfaceVariant = LightOnSurfaceVariant,
-    outline = LightOutline
+    outline = LightOutline,
+    outlineVariant = LightOutlineVariant
 )
 
 private val DarkColors = darkColorScheme(
@@ -51,7 +53,8 @@ private val DarkColors = darkColorScheme(
     onSurface = DarkOnBackground,
     surfaceVariant = DarkSurfaceVariant,
     onSurfaceVariant = DarkOnSurfaceVariant,
-    outline = DarkOutline
+    outline = DarkOutline,
+    outlineVariant = DarkOutlineVariant
 )
 
 private val AppShapes = Shapes(

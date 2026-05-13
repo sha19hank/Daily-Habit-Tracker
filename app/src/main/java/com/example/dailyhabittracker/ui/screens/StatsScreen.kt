@@ -30,8 +30,11 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.Color
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -401,18 +404,33 @@ fun StatsScreen(
             },
             title = { Text(if (editingGoalId == null) "New goal" else "Edit goal") },
             text = {
+                val isLightMode = MaterialTheme.colorScheme.background.luminance() > 0.5f
+                val fieldFillColor = if (isLightMode) Color(0xFFFBF8F4) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                val fieldFocusedFillColor = if (isLightMode) Color(0xFFFBF8F4) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                val fieldShape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp)
+
+                val textFieldColors = OutlinedTextFieldDefaults.colors(
+                    unfocusedContainerColor = fieldFillColor,
+                    focusedContainerColor = fieldFocusedFillColor,
+                    unfocusedBorderColor = MaterialTheme.colorScheme.outline,
+                    focusedBorderColor = MaterialTheme.colorScheme.primary
+                )
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
                         value = goalTitle,
                         onValueChange = { goalTitle = it },
                         label = { Text("Title") },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = textFieldColors,
+                        shape = fieldShape
                     )
                     OutlinedTextField(
                         value = goalDescription,
                         onValueChange = { goalDescription = it },
                         label = { Text("Description") },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = textFieldColors,
+                        shape = fieldShape
                     )
                     TextButton(
                         onClick = {

@@ -56,6 +56,9 @@ import com.example.dailyhabittracker.viewmodel.HabitViewModel
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.draw.shadow
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -100,37 +103,58 @@ fun CalendarScreen(navController: NavController, viewModel: HabitViewModel) {
         ) {
             CalendarHeaderStats(days = days, habits = habits)
 
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
+            val isLightMode = MaterialTheme.colorScheme.background.luminance() > 0.5f
+            
+            Surface(
+                color = if (isLightMode) Color(0xFFFFFDF9) else MaterialTheme.colorScheme.surface,
+                shape = MaterialTheme.shapes.large,
+                border = if (isLightMode) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline) else null,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp)
+                    .then(
+                        if (isLightMode) Modifier.shadow(
+                            elevation = 4.dp,
+                            shape = MaterialTheme.shapes.large,
+                            spotColor = Color(0xFF2A140A).copy(alpha = 0.08f),
+                            ambientColor = Color(0xFF2A140A).copy(alpha = 0.04f)
+                        ) else Modifier
+                    )
             ) {
-                IconButton(onClick = { displayedMonth = displayedMonth.minusMonths(1) }) {
-                    Icon(imageVector = Icons.Default.ChevronLeft, contentDescription = "Previous month")
-                }
-                Text(
-                    text = "${displayedMonth.month.name.lowercase().replaceFirstChar { it.uppercase() }} ${displayedMonth.year}",
-                    style = MaterialTheme.typography.titleMedium
-                )
-                IconButton(onClick = { displayedMonth = displayedMonth.plusMonths(1) }) {
-                    Icon(imageVector = Icons.Default.ChevronRight, contentDescription = "Next month")
-                }
-            }
-
-            Crossfade(
-                targetState = displayedMonth,
-                animationSpec = tween(durationMillis = 300),
-                label = "monthFade"
-            ) { targetMonth ->
-                CalendarMonthGrid(
-                    month = targetMonth,
-                    days = if (targetMonth == month) days else emptyList(),
-                    onDaySelected = { date ->
-                        selectedDate = date
-                        viewModel.loadDayDetail(date)
-                        isSheetOpen = true
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        IconButton(onClick = { displayedMonth = displayedMonth.minusMonths(1) }) {
+                            Icon(imageVector = Icons.Default.ChevronLeft, contentDescription = "Previous month")
+                        }
+                        Text(
+                            text = "${displayedMonth.month.name.lowercase().replaceFirstChar { it.uppercase() }} ${displayedMonth.year}",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        IconButton(onClick = { displayedMonth = displayedMonth.plusMonths(1) }) {
+                            Icon(imageVector = Icons.Default.ChevronRight, contentDescription = "Next month")
+                        }
                     }
-                )
+
+                    Crossfade(
+                        targetState = displayedMonth,
+                        animationSpec = tween(durationMillis = 300),
+                        label = "monthFade"
+                    ) { targetMonth ->
+                        CalendarMonthGrid(
+                            month = targetMonth,
+                            days = if (targetMonth == month) days else emptyList(),
+                            onDaySelected = { date ->
+                                selectedDate = date
+                                viewModel.loadDayDetail(date)
+                                isSheetOpen = true
+                            }
+                        )
+                    }
+                }
             }
             
             Spacer(modifier = Modifier.height(24.dp))

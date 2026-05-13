@@ -37,8 +37,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
@@ -69,9 +71,23 @@ fun HabitCard(
     var expanded by remember { mutableStateOf(false) }
     var showDeleteDialog by remember { mutableStateOf(false) }
 
+    val isLightMode = MaterialTheme.colorScheme.background.luminance() > 0.5f
     val baseTint = if (habit.color != 0) Color(habit.color) else MaterialTheme.colorScheme.surface
+    
+    val lightThemeTint = when (habit.color) {
+        0xFF3B82F6.toInt() -> Color(0xFFD6DEE8)
+        0xFF10B981.toInt() -> Color(0xFFDDE5DD)
+        0xFFF59E0B.toInt() -> Color(0xFFE8DDD3)
+        0xFFEF4444.toInt() -> Color(0xFFD9C7C3)
+        0xFF8B5CF6.toInt() -> Color(0xFFDED8E8)
+        0xFF14B8A6.toInt() -> Color(0xFFD7E5E2)
+        else -> MaterialTheme.colorScheme.surface
+    }
+
     val containerColor by animateColorAsState(
         targetValue = when {
+            isLightMode && habit.color != 0 -> lightThemeTint
+            isLightMode -> MaterialTheme.colorScheme.surface
             isCompletedToday -> baseTint.copy(alpha = 0.12f)
             habit.color != 0 -> baseTint.copy(alpha = 0.08f)
             else -> MaterialTheme.colorScheme.surface
@@ -83,9 +99,9 @@ fun HabitCard(
     val pressed by interactionSource.collectIsPressedAsState()
     val elevation by animateDpAsState(
         targetValue = when {
-            pressed -> 4.dp
-            isCompletedToday -> 6.dp
-            else -> 2.dp
+            pressed -> if (isLightMode) 2.dp else 4.dp
+            isCompletedToday -> if (isLightMode) 3.dp else 6.dp
+            else -> if (isLightMode) 1.dp else 2.dp
         },
         animationSpec = tween(durationMillis = 180),
         label = "cardElevation"
@@ -109,15 +125,24 @@ fun HabitCard(
                 scaleX = scale
                 scaleY = scale
             }
+            .then(
+                if (isLightMode) Modifier.shadow(
+                    elevation = elevation,
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(26.dp),
+                    spotColor = Color(0xFF2A140A).copy(alpha = 0.10f),
+                    ambientColor = Color(0xFF2A140A).copy(alpha = 0.08f)
+                ) else Modifier
+            )
             .animateContentSize(animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.8f, stiffness = 200f))
             .clickable(
                 interactionSource = interactionSource,
                 indication = androidx.compose.material.ripple.rememberRipple(),
                 onClick = { expanded = !expanded }
             ),
-        shape = MaterialTheme.shapes.large,
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(26.dp),
         colors = CardDefaults.cardColors(containerColor = containerColor),
-        elevation = CardDefaults.cardElevation(defaultElevation = elevation)
+        elevation = if (isLightMode) CardDefaults.cardElevation(defaultElevation = 0.dp) else CardDefaults.cardElevation(defaultElevation = elevation),
+        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
     ) {
         Box {
             if (habit.color != 0) {

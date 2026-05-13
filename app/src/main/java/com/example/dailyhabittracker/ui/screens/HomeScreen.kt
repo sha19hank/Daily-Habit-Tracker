@@ -76,6 +76,7 @@ fun HomeScreen(
     val stepState by viewModel.stepState.collectAsState()
     val focusMode by viewModel.focusModeEnabled.collectAsState()
     val haptics by viewModel.hapticsEnabled.collectAsState()
+    val darkMode by viewModel.darkModeEnabled.collectAsState()
     val activeGoal by viewModel.activeGoal.collectAsState()
     val goals by viewModel.goals.collectAsState()
     val goalProgress by viewModel.goalProgress.collectAsState()
@@ -182,7 +183,7 @@ fun HomeScreen(
                             )
                             Text(
                                 text = if (scheduledTodayCount == 0) "No habits today" else if (completedTodayCount == scheduledTodayCount) "Perfect Day!" else "Keep Going",
-                                style = androidx.compose.material3.MaterialTheme.typography.headlineMedium
+                                style = androidx.compose.material3.MaterialTheme.typography.headlineMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
                             )
                             Text(
                                 text = "$completedTodayCount of $scheduledTodayCount completed",
@@ -207,7 +208,7 @@ fun HomeScreen(
                                 modifier = Modifier
                                     .size(80.dp)
                                     .background(
-                                        color = androidx.compose.material3.MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                        color = androidx.compose.material3.MaterialTheme.colorScheme.primary.copy(alpha = if (darkMode) 0.15f else 0.0f),
                                         shape = androidx.compose.foundation.shape.CircleShape
                                     )
                             )
@@ -222,7 +223,7 @@ fun HomeScreen(
                             CircularProgressIndicator(
                                 progress = { animatedProgress },
                                 modifier = Modifier.size(80.dp),
-                                color = androidx.compose.material3.MaterialTheme.colorScheme.primary,
+                                color = if (!darkMode) androidx.compose.material3.MaterialTheme.colorScheme.secondary else androidx.compose.material3.MaterialTheme.colorScheme.primary,
                                 strokeWidth = 8.dp,
                                 strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
                             )

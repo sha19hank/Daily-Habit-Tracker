@@ -38,7 +38,9 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -86,6 +88,19 @@ fun AddHabitScreen(
     var selectedGoalId by remember { mutableStateOf<Long?>(null) }
     val goals by viewModel.goals.collectAsState()
     val context = LocalContext.current
+
+    val isLightMode = androidx.compose.material3.MaterialTheme.colorScheme.background.luminance() > 0.5f
+    val fieldFillColor = if (isLightMode) androidx.compose.ui.graphics.Color(0xFFFBF8F4) else androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+    val fieldFocusedFillColor = if (isLightMode) androidx.compose.ui.graphics.Color(0xFFFBF8F4) else androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+    val fieldShape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp)
+
+    val textFieldColors = OutlinedTextFieldDefaults.colors(
+        unfocusedContainerColor = fieldFillColor,
+        focusedContainerColor = fieldFocusedFillColor,
+        unfocusedBorderColor = androidx.compose.material3.MaterialTheme.colorScheme.outline,
+        focusedBorderColor = androidx.compose.material3.MaterialTheme.colorScheme.primary
+    )
+    
     val activityRecognitionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { granted ->
@@ -144,21 +159,27 @@ fun AddHabitScreen(
                 label = { Text("Habit name") },
                 isError = showError,
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                colors = textFieldColors,
+                shape = fieldShape
             )
             Spacer(modifier = Modifier.height(16.dp))
             OutlinedTextField(
                 value = description,
                 onValueChange = { description = it },
                 label = { Text("Description (optional)") },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                colors = textFieldColors,
+                shape = fieldShape
             )
             Spacer(modifier = Modifier.height(16.dp))
             OutlinedTextField(
                 value = category,
                 onValueChange = { category = it },
                 label = { Text("Category (optional)") },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                colors = textFieldColors,
+                shape = fieldShape
             )
 
             Spacer(modifier = Modifier.height(16.dp))
@@ -174,7 +195,13 @@ fun AddHabitScreen(
                     label = { Text("Goal (optional)") },
                     trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = goalExpanded) },
                     modifier = Modifier.menuAnchor().fillMaxWidth(),
-                    colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors()
+                    colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(
+                        unfocusedContainerColor = fieldFillColor,
+                        focusedContainerColor = fieldFocusedFillColor,
+                        unfocusedBorderColor = androidx.compose.material3.MaterialTheme.colorScheme.outline,
+                        focusedBorderColor = androidx.compose.material3.MaterialTheme.colorScheme.primary
+                    ),
+                    shape = fieldShape
                 )
                 ExposedDropdownMenu(
                     expanded = goalExpanded,
@@ -301,7 +328,9 @@ fun AddHabitScreen(
                     value = stepGoal,
                     onValueChange = { stepGoal = it.filter { char -> char.isDigit() } },
                     label = { Text("Daily steps") },
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = textFieldColors,
+                    shape = fieldShape
                 )
             }
             Spacer(modifier = Modifier.height(24.dp))
@@ -379,13 +408,17 @@ fun AddHabitScreen(
                         value = goalTitle,
                         onValueChange = { goalTitle = it },
                         label = { Text("Title") },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = textFieldColors,
+                        shape = fieldShape
                     )
                     OutlinedTextField(
                         value = goalDescription,
                         onValueChange = { goalDescription = it },
                         label = { Text("Description") },
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = textFieldColors,
+                        shape = fieldShape
                     )
                     TextButton(
                         onClick = {

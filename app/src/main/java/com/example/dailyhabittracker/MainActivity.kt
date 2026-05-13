@@ -47,6 +47,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.Icon
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.shadow
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.navigation.NavDestination.Companion.hierarchy
 
 class MainActivity : ComponentActivity() {
@@ -67,6 +69,7 @@ class MainActivity : ComponentActivity() {
 private fun AppNavHost(viewModel: HabitViewModel) {
     val navController: NavHostController = rememberNavController()
     val context = LocalContext.current
+    val darkMode by viewModel.darkModeEnabled.collectAsState()
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val rawRoute = navBackStackEntry?.destination?.route ?: ""
@@ -77,21 +80,38 @@ private fun AppNavHost(viewModel: HabitViewModel) {
     val showFab = currentRoute == "today" || currentRoute == "journal" || currentRoute == "insights"
     val journalDialogRequest = rememberSaveable { mutableStateOf(false) }
     val goalDialogRequest = rememberSaveable { mutableStateOf(false) }
+    val fabInteractionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
+    val isFabPressed by fabInteractionSource.collectIsPressedAsState()
 
     Scaffold(
         floatingActionButton = {
             if (showFab) {
                 val isJournal = currentRoute == "journal"
                 val isInsights = currentRoute == "insights"
-                FloatingActionButton(onClick = {
-                    if (isJournal) {
-                        journalDialogRequest.value = true
-                    } else if (isInsights) {
-                        goalDialogRequest.value = true
-                    } else {
-                        navController.navigate("add")
-                    }
-                }) {
+                FloatingActionButton(
+                    onClick = {
+                        if (isJournal) {
+                            journalDialogRequest.value = true
+                        } else if (isInsights) {
+                            goalDialogRequest.value = true
+                        } else {
+                            navController.navigate("add")
+                        }
+                    },
+                    interactionSource = fabInteractionSource,
+                    containerColor = if (darkMode) androidx.compose.material3.MaterialTheme.colorScheme.primary else if (isFabPressed) androidx.compose.ui.graphics.Color(0xFF7A3E2B) else androidx.compose.ui.graphics.Color(0xFFA46B3C),
+                    contentColor = androidx.compose.material3.MaterialTheme.colorScheme.onPrimary,
+                    elevation = androidx.compose.material3.FloatingActionButtonDefaults.elevation(
+                        defaultElevation = if (darkMode) 6.dp else 4.dp,
+                        pressedElevation = if (darkMode) 12.dp else 6.dp
+                    ),
+                    modifier = if (darkMode) Modifier else Modifier.shadow(
+                        elevation = if (isFabPressed) 6.dp else 4.dp,
+                        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                        spotColor = androidx.compose.ui.graphics.Color(0xFF2A140A).copy(alpha = 0.4f),
+                        ambientColor = androidx.compose.ui.graphics.Color(0xFF2A140A).copy(alpha = 0.2f)
+                    )
+                ) {
                     Icon(
                         imageVector = if (isJournal) Icons.Filled.EditNote else Icons.Filled.Add,
                         contentDescription = if (isJournal) "New journal entry" else if (isInsights) "Create goal" else "Add habit"
@@ -101,7 +121,7 @@ private fun AppNavHost(viewModel: HabitViewModel) {
         },
         bottomBar = {
             if (showBottomBar) {
-                BottomNavBar(navController = navController)
+                BottomNavBar(navController = navController, darkMode = darkMode)
             }
         }
     ) { padding ->
@@ -110,11 +130,19 @@ private fun AppNavHost(viewModel: HabitViewModel) {
                 .fillMaxSize()
                 .background(
                     brush = Brush.verticalGradient(
-                        colors = listOf(
-                            androidx.compose.material3.MaterialTheme.colorScheme.background,
-                            androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
-                            androidx.compose.material3.MaterialTheme.colorScheme.background
-                        )
+                        colors = if (darkMode) {
+                            listOf(
+                                androidx.compose.material3.MaterialTheme.colorScheme.background,
+                                androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
+                                androidx.compose.material3.MaterialTheme.colorScheme.background
+                            )
+                        } else {
+                            listOf(
+                                androidx.compose.ui.graphics.Color(0xFFF7F3ED),
+                                androidx.compose.ui.graphics.Color(0xFFF5F1EA),
+                                androidx.compose.ui.graphics.Color(0xFFF3EEE7)
+                            )
+                        }
                     )
                 )
         ) {
@@ -177,7 +205,7 @@ private fun AppNavHost(viewModel: HabitViewModel) {
 }
 
 @Composable
-private fun BottomNavBar(navController: NavHostController) {
+private fun BottomNavBar(navController: NavHostController, darkMode: Boolean) {
     val items = listOf(
         BottomNavItem("today", "Today", Icons.Filled.CheckCircle),
         BottomNavItem("calendar", "Calendar", Icons.Filled.DateRange),
@@ -192,11 +220,20 @@ private fun BottomNavBar(navController: NavHostController) {
     androidx.compose.material3.Surface(
         modifier = Modifier
             .padding(horizontal = 16.dp, vertical = 16.dp)
-            .fillMaxWidth(),
+            .fillMaxWidth()
+            .then(
+                if (darkMode) Modifier else Modifier.shadow(
+                    elevation = 12.dp,
+                    shape = androidx.compose.foundation.shape.RoundedCornerShape(32.dp),
+                    spotColor = androidx.compose.ui.graphics.Color(0xFF2A140A).copy(alpha = 0.08f),
+                    ambientColor = androidx.compose.ui.graphics.Color(0xFF2A140A).copy(alpha = 0.04f)
+                )
+            ),
         shape = androidx.compose.foundation.shape.RoundedCornerShape(32.dp),
-        color = androidx.compose.material3.MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
-        shadowElevation = 8.dp,
-        tonalElevation = 8.dp
+        color = androidx.compose.material3.MaterialTheme.colorScheme.surface.copy(alpha = if (darkMode) 0.9f else 0.95f),
+        shadowElevation = if (darkMode) 8.dp else 0.dp,
+        tonalElevation = if (darkMode) 8.dp else 0.dp,
+        border = if (!darkMode) androidx.compose.foundation.BorderStroke(1.dp, androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant) else null
     ) {
         NavigationBar(
             modifier = Modifier.fillMaxWidth().height(72.dp),
@@ -219,7 +256,11 @@ private fun BottomNavBar(navController: NavHostController) {
                     alwaysShowLabel = false,
                     label = { Text(item.label, style = androidx.compose.material3.MaterialTheme.typography.labelSmall) },
                     colors = androidx.compose.material3.NavigationBarItemDefaults.colors(
-                        indicatorColor = androidx.compose.material3.MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                        selectedIconColor = if (darkMode) androidx.compose.material3.MaterialTheme.colorScheme.onPrimaryContainer else androidx.compose.ui.graphics.Color(0xFF7A3E2B),
+                        unselectedIconColor = if (darkMode) androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant else androidx.compose.ui.graphics.Color(0xFF8B8178),
+                        selectedTextColor = if (darkMode) androidx.compose.material3.MaterialTheme.colorScheme.onPrimaryContainer else androidx.compose.ui.graphics.Color(0xFF7A3E2B),
+                        unselectedTextColor = if (darkMode) androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant else androidx.compose.ui.graphics.Color(0xFF8B8178),
+                        indicatorColor = if (darkMode) androidx.compose.material3.MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f) else androidx.compose.ui.graphics.Color(0xFFF7F2EC)
                     )
                 )
             }
