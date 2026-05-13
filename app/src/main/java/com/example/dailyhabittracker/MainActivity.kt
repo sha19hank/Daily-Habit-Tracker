@@ -11,6 +11,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -63,7 +69,9 @@ private fun AppNavHost(viewModel: HabitViewModel) {
     val context = LocalContext.current
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = navBackStackEntry?.destination?.route
+    val rawRoute = navBackStackEntry?.destination?.route ?: ""
+    val currentRoute = rawRoute.substringBefore("?")
+    
     val bottomBarRoutes = remember { setOf("today", "calendar", "journal", "insights", "settings") }
     val showBottomBar = currentRoute in bottomBarRoutes
     val showFab = currentRoute == "today" || currentRoute == "journal" || currentRoute == "insights"
@@ -97,44 +105,72 @@ private fun AppNavHost(viewModel: HabitViewModel) {
             }
         }
     ) { padding ->
-        NavHost(
-            navController = navController,
-            startDestination = "today",
-            modifier = Modifier.padding(padding)
+        androidx.compose.foundation.layout.Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            androidx.compose.material3.MaterialTheme.colorScheme.background,
+                            androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
+                            androidx.compose.material3.MaterialTheme.colorScheme.background
+                        )
+                    )
+                )
         ) {
-            composable("today") { HomeScreen(navController = navController, viewModel = viewModel) }
-            composable("calendar") { CalendarScreen(navController = navController, viewModel = viewModel) }
-            composable("journal") {
-                JournalScreen(
-                    viewModel = viewModel,
-                    openDialogRequest = journalDialogRequest.value,
-                    onDialogRequestConsumed = { journalDialogRequest.value = false }
-                )
-            }
-            composable(
-                route = "insights?goalId={goalId}",
-                arguments = listOf(navArgument("goalId") { type = NavType.LongType; defaultValue = -1L })
-            ) { backStackEntry ->
-                val goalId = backStackEntry.arguments?.getLong("goalId").takeIf { it != -1L }
-                StatsScreen(
-                    navController = navController, 
-                    viewModel = viewModel,
-                    highlightGoalId = goalId,
-                    openDialogRequest = goalDialogRequest.value,
-                    onDialogRequestConsumed = { goalDialogRequest.value = false }
-                ) 
-            }
-            composable("settings") { SettingsScreen(navController = navController, viewModel = viewModel) }
-            composable(
-                route = "add?habitId={habitId}&goalId={goalId}",
-                arguments = listOf(
-                    navArgument("habitId") { type = NavType.LongType; defaultValue = -1L },
-                    navArgument("goalId") { type = NavType.LongType; defaultValue = -1L }
-                )
-            ) { backStackEntry ->
-                val habitId = backStackEntry.arguments?.getLong("habitId").takeIf { it != -1L }
-                val goalId = backStackEntry.arguments?.getLong("goalId").takeIf { it != -1L }
-                AddHabitScreen(navController = navController, viewModel = viewModel, habitId = habitId, prefilledGoalId = goalId)
+            NavHost(
+                navController = navController,
+                startDestination = "today",
+                modifier = Modifier.padding(padding),
+                enterTransition = { 
+                    androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(300)) + 
+                    androidx.compose.animation.scaleIn(initialScale = 0.98f, animationSpec = androidx.compose.animation.core.tween(300)) 
+                },
+                exitTransition = { 
+                    androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(300)) 
+                },
+                popEnterTransition = { 
+                    androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(300)) 
+                },
+                popExitTransition = { 
+                    androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(300)) + 
+                    androidx.compose.animation.scaleOut(targetScale = 0.98f, animationSpec = androidx.compose.animation.core.tween(300)) 
+                }
+            ) {
+                composable("today") { HomeScreen(navController = navController, viewModel = viewModel) }
+                composable("calendar") { CalendarScreen(navController = navController, viewModel = viewModel) }
+                composable("journal") {
+                    JournalScreen(
+                        viewModel = viewModel,
+                        openDialogRequest = journalDialogRequest.value,
+                        onDialogRequestConsumed = { journalDialogRequest.value = false }
+                    )
+                }
+                composable(
+                    route = "insights?goalId={goalId}",
+                    arguments = listOf(navArgument("goalId") { type = NavType.LongType; defaultValue = -1L })
+                ) { backStackEntry ->
+                    val goalId = backStackEntry.arguments?.getLong("goalId").takeIf { it != -1L }
+                    StatsScreen(
+                        navController = navController, 
+                        viewModel = viewModel,
+                        highlightGoalId = goalId,
+                        openDialogRequest = goalDialogRequest.value,
+                        onDialogRequestConsumed = { goalDialogRequest.value = false }
+                    ) 
+                }
+                composable("settings") { SettingsScreen(navController = navController, viewModel = viewModel) }
+                composable(
+                    route = "add?habitId={habitId}&goalId={goalId}",
+                    arguments = listOf(
+                        navArgument("habitId") { type = NavType.LongType; defaultValue = -1L },
+                        navArgument("goalId") { type = NavType.LongType; defaultValue = -1L }
+                    )
+                ) { backStackEntry ->
+                    val habitId = backStackEntry.arguments?.getLong("habitId").takeIf { it != -1L }
+                    val goalId = backStackEntry.arguments?.getLong("goalId").takeIf { it != -1L }
+                    AddHabitScreen(navController = navController, viewModel = viewModel, habitId = habitId, prefilledGoalId = goalId)
+                }
             }
         }
     }
@@ -153,21 +189,40 @@ private fun BottomNavBar(navController: NavHostController) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
 
-    NavigationBar {
-        items.forEach { item ->
-            val selected = currentDestination?.hierarchy?.any { it.route?.substringBefore("?") == item.route } == true
-            NavigationBarItem(
-                selected = selected,
-                onClick = {
-                    navController.navigate(item.route) {
-                        popUpTo(navController.graph.startDestinationId) { saveState = true }
-                        launchSingleTop = true
-                        restoreState = true
-                    }
-                },
-                icon = { androidx.compose.material3.Icon(item.icon, contentDescription = item.label) },
-                label = { Text(item.label) }
-            )
+    androidx.compose.material3.Surface(
+        modifier = Modifier
+            .padding(horizontal = 16.dp, vertical = 16.dp)
+            .fillMaxWidth(),
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(32.dp),
+        color = androidx.compose.material3.MaterialTheme.colorScheme.surface.copy(alpha = 0.9f),
+        shadowElevation = 8.dp,
+        tonalElevation = 8.dp
+    ) {
+        NavigationBar(
+            modifier = Modifier.fillMaxWidth().height(72.dp),
+            containerColor = androidx.compose.ui.graphics.Color.Transparent,
+            tonalElevation = 0.dp,
+            windowInsets = androidx.compose.foundation.layout.WindowInsets(0)
+        ) {
+            items.forEach { item ->
+                val selected = currentDestination?.hierarchy?.any { it.route?.substringBefore("?") == item.route } == true
+                NavigationBarItem(
+                    selected = selected,
+                    onClick = {
+                        navController.navigate(item.route) {
+                            popUpTo(navController.graph.startDestinationId) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    icon = { androidx.compose.material3.Icon(item.icon, contentDescription = item.label) },
+                    alwaysShowLabel = false,
+                    label = { Text(item.label, style = androidx.compose.material3.MaterialTheme.typography.labelSmall) },
+                    colors = androidx.compose.material3.NavigationBarItemDefaults.colors(
+                        indicatorColor = androidx.compose.material3.MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                    )
+                )
+            }
         }
     }
 }

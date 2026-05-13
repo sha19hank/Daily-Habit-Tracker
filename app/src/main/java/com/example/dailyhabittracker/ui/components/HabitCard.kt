@@ -91,8 +91,14 @@ fun HabitCard(
         label = "cardElevation"
     )
     val scale by animateFloatAsState(
-        targetValue = if (isCompletedToday) 1.01f else 1f,
-        animationSpec = tween(durationMillis = 180),
+        targetValue = when {
+            pressed -> 0.96f
+            else -> 1f
+        },
+        animationSpec = androidx.compose.animation.core.spring(
+            dampingRatio = 0.6f, 
+            stiffness = 300f
+        ),
         label = "cardScale"
     )
 
@@ -103,12 +109,13 @@ fun HabitCard(
                 scaleX = scale
                 scaleY = scale
             }
-            .animateContentSize()
+            .animateContentSize(animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.8f, stiffness = 200f))
             .clickable(
                 interactionSource = interactionSource,
-                indication = null,
+                indication = androidx.compose.material.ripple.rememberRipple(),
                 onClick = { expanded = !expanded }
             ),
+        shape = MaterialTheme.shapes.large,
         colors = CardDefaults.cardColors(containerColor = containerColor),
         elevation = CardDefaults.cardElevation(defaultElevation = elevation)
     ) {
@@ -123,7 +130,7 @@ fun HabitCard(
                         .background(Color(habit.color))
                 )
             }
-            Column(modifier = Modifier.padding(16.dp)) {
+            Column(modifier = Modifier.padding(20.dp)) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically
@@ -156,7 +163,15 @@ fun HabitCard(
                             )
                         }
                     }
-                    Checkbox(
+                    
+                    Box(
+                        modifier = Modifier
+                            .graphicsLayer {
+                                scaleX = if (pressed) 0.9f else 1f
+                                scaleY = if (pressed) 0.9f else 1f
+                            }
+                    ) {
+                        Checkbox(
                         checked = isCompletedToday,
                         enabled = !isPaused && isScheduledToday,
                         onCheckedChange = { onToggleCompletion() },
@@ -164,6 +179,7 @@ fun HabitCard(
                             contentDescription = if (isCompletedToday) "Completed" else "Mark complete"
                         }
                     )
+                    }
                 }
 
                 if (expanded) {

@@ -126,9 +126,10 @@ class HabitRepository(
         }
         val longest = maxOf(habit.longestStreak, newStreak)
         val tokenAward = milestoneTokenAward(newStreak)
-        val token = if (tokenAward > 0) dao.getTokenOnce() ?: TokenEntity() else null
+        val alreadyAwarded = settings.hasAwardedTokenForHabitOnDate(habit.id, today)
 
         database.withTransaction {
+            val token = if (tokenAward > 0 && !alreadyAwarded) dao.getTokenOnce() ?: TokenEntity() else null
             dao.updateHabit(
                 habit.copy(
                     lastCompletedDate = today,
@@ -137,9 +138,12 @@ class HabitRepository(
                 )
             )
             dao.insertCompletion(HabitCompletionEntity(habitId = habit.id, completionDate = today))
-            if (tokenAward > 0 && token != null) {
+            if (tokenAward > 0 && token != null && !alreadyAwarded) {
                 dao.upsertToken(token.copy(count = token.count + tokenAward))
             }
+        }
+        if (tokenAward > 0 && !alreadyAwarded) {
+            settings.setAwardedTokenForHabitOnDate(habit.id, today)
         }
         settings.clearPreviousStreak(habit.id)
     }
@@ -185,13 +189,15 @@ class HabitRepository(
 
     suspend fun buyStreakFreeze(habitId: Long): Boolean {
         if (settings.isStreakFrozen(habitId)) return false
-        
-        val token = dao.getTokenOnce() ?: TokenEntity()
-        if (token.count <= 0) return false
-
+        var success = false
         database.withTransaction {
-            dao.upsertToken(token.copy(count = token.count - 1))
+            val token = dao.getTokenOnce() ?: TokenEntity()
+            if (token.count > 0) {
+                dao.upsertToken(token.copy(count = token.count - 1))
+                success = true
+            }
         }
+        if (!success) return false
         settings.setStreakFrozen(habitId, true)
         return true
     }
@@ -236,12 +242,11 @@ class HabitRepository(
     fun tokenFlow(): Flow<TokenEntity?> = dao.getTokenFlow()
 
     private fun milestoneTokenAward(streak: Int): Int {
-        return when (streak) {
-            7 -> 1
-            30 -> 3
-            100 -> 10
-            else -> 0
-        }
+        var base = 1 // 1 token per completion
+        if (streak % 7 == 0 && streak > 0) base += 5
+        if (streak % 30 == 0 && streak > 0) base += 15
+        if (streak % 100 == 0 && streak > 0) base += 50
+        return base
     }
 
     fun isScheduledForDay(habit: HabitEntity, date: LocalDate): Boolean {

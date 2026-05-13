@@ -128,4 +128,15 @@ class SettingsRepository(private val context: Context) {
         val prefs = context.dataStore.data.first()
         return prefs[key] ?: false
     }
+
+    suspend fun hasAwardedTokenForHabitOnDate(habitId: Long, date: LocalDate): Boolean {
+        val key = booleanPreferencesKey("token_awarded_${habitId}_${date}")
+        val prefs = context.dataStore.data.first()
+        return prefs[key] ?: false
+    }
+
+    suspend fun setAwardedTokenForHabitOnDate(habitId: Long, date: LocalDate) {
+        val key = booleanPreferencesKey("token_awarded_${habitId}_${date}")
+        context.dataStore.edit { it[key] = true }
+    }
 }

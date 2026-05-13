@@ -139,6 +139,7 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
 
     val tokenCount: StateFlow<Int> = repository.tokenFlow()
         .map { it?.count ?: 0 }
+        .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
 
     val stepState: StateFlow<StepState> = stepTracker.stepState()

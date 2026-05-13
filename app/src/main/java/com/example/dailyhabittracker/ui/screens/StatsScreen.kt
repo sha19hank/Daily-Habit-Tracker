@@ -10,8 +10,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.background
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.AlertDialog
@@ -490,13 +493,21 @@ private fun WeeklyBars(weeklySummary: List<com.example.dailyhabittracker.data.Da
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(text = date.dayOfWeek.name.take(3), modifier = Modifier.width(40.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                Surface(
-                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
-                    shape = MaterialTheme.shapes.small,
+                val fraction = (count.toFloat() / max).coerceIn(0f, 1f)
+                Box(
                     modifier = Modifier
-                        .height(10.dp)
-                        .fillMaxWidth(fraction = (count.toFloat() / max).coerceIn(0f, 1f))
-                ) {}
+                        .height(12.dp)
+                        .fillMaxWidth(fraction = if (fraction > 0f) fraction else 0.01f)
+                        .background(
+                            brush = Brush.horizontalGradient(
+                                colors = listOf(
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.4f),
+                                    MaterialTheme.colorScheme.primary
+                                )
+                            ),
+                            shape = MaterialTheme.shapes.small
+                        )
+                )
                 Spacer(modifier = Modifier.width(8.dp))
                 Text(text = count.toString())
             }

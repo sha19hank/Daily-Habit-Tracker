@@ -12,9 +12,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Star
@@ -41,6 +43,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -151,32 +154,82 @@ fun HomeScreen(
                 )
             }
             item(key = "progress") {
-                Surface(tonalElevation = 1.dp, shape = androidx.compose.material3.MaterialTheme.shapes.medium) {
+                // Cinematic Hero Card
+                androidx.compose.material3.Card(
+                    modifier = Modifier.fillMaxWidth().clickable(
+                        interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+                        indication = androidx.compose.material.ripple.rememberRipple(),
+                        onClick = { }
+                    ),
+                    shape = androidx.compose.material3.MaterialTheme.shapes.extraLarge,
+                    colors = androidx.compose.material3.CardDefaults.cardColors(
+                        containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                    ),
+                    elevation = androidx.compose.material3.CardDefaults.cardElevation(defaultElevation = 0.dp)
+                ) {
                     androidx.compose.foundation.layout.Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(16.dp),
+                            .padding(24.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.weight(1f)) {
                             Text(
-                                text = "Daily progress",
-                                style = androidx.compose.material3.MaterialTheme.typography.titleMedium
+                                text = "Your Progress",
+                                style = androidx.compose.material3.MaterialTheme.typography.labelLarge,
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.primary
                             )
                             Text(
-                                text = "$completedTodayCount / $scheduledTodayCount habits completed",
-                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                text = if (scheduledTodayCount == 0) "No habits today" else if (completedTodayCount == scheduledTodayCount) "Perfect Day!" else "Keep Going",
+                                style = androidx.compose.material3.MaterialTheme.typography.headlineMedium
+                            )
+                            Text(
+                                text = "$completedTodayCount of $scheduledTodayCount completed",
+                                style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
                                 color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
                             )
                         }
                         Box(contentAlignment = Alignment.Center) {
                             val progress = if (scheduledTodayCount == 0) 0f
                             else completedTodayCount.toFloat() / scheduledTodayCount.toFloat()
-                            CircularProgressIndicator(progress = { progress }, strokeWidth = 6.dp)
+                            val animatedProgress by androidx.compose.animation.core.animateFloatAsState(
+                                targetValue = progress,
+                                animationSpec = androidx.compose.animation.core.spring(
+                                    dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
+                                    stiffness = androidx.compose.animation.core.Spring.StiffnessLow
+                                ),
+                                label = "progress"
+                            )
+                            
+                            // Ambient Glow behind progress
+                            Box(
+                                modifier = Modifier
+                                    .size(80.dp)
+                                    .background(
+                                        color = androidx.compose.material3.MaterialTheme.colorScheme.primary.copy(alpha = 0.15f),
+                                        shape = androidx.compose.foundation.shape.CircleShape
+                                    )
+                            )
+                            
+                            CircularProgressIndicator(
+                                progress = { 1f },
+                                modifier = Modifier.size(80.dp),
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant,
+                                strokeWidth = 8.dp,
+                                strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
+                            )
+                            CircularProgressIndicator(
+                                progress = { animatedProgress },
+                                modifier = Modifier.size(80.dp),
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.primary,
+                                strokeWidth = 8.dp,
+                                strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
+                            )
                             Text(
-                                text = "${(progress * 100).toInt()}%",
-                                style = androidx.compose.material3.MaterialTheme.typography.labelMedium
+                                text = "${(animatedProgress * 100).toInt()}%",
+                                style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurface
                             )
                         }
                     }
@@ -190,34 +243,48 @@ fun HomeScreen(
                     val pagerState = rememberPagerState(pageCount = { carouselGoals.size })
                     HorizontalPager(
                         state = pagerState,
-                        contentPadding = PaddingValues(end = 32.dp),
+                        contentPadding = PaddingValues(horizontal = 32.dp),
                         pageSpacing = 16.dp,
                         modifier = Modifier.fillMaxWidth()
                     ) { page ->
                         val goal = carouselGoals[page]
                         val progressDetails = goalProgress[goal.goalId] ?: com.example.dailyhabittracker.data.GoalProgressDetails(0, emptyList())
                         
+                        // Calculate parallax scale
+                        val pageOffset = (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
+                        val scale = 1f - (kotlin.math.abs(pageOffset) * 0.1f).coerceIn(0f, 0.1f)
+                        val alpha = 1f - (kotlin.math.abs(pageOffset) * 0.4f).coerceIn(0f, 0.4f)
+                        
                         androidx.compose.material3.Card(
                             modifier = Modifier
                                 .fillMaxWidth()
+                                .graphicsLayer {
+                                    scaleX = scale
+                                    scaleY = scale
+                                    this.alpha = alpha
+                                }
                                 .clickable { navController.navigate("insights?goalId=${goal.goalId}") },
                             colors = androidx.compose.material3.CardDefaults.cardColors(
-                                containerColor = androidx.compose.material3.MaterialTheme.colorScheme.primaryContainer
-                            )
+                                containerColor = androidx.compose.material3.MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
+                            ),
+                            shape = androidx.compose.material3.MaterialTheme.shapes.large,
+                            elevation = androidx.compose.material3.CardDefaults.cardElevation(defaultElevation = 0.dp)
                         ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
+                            Column(modifier = Modifier.padding(20.dp)) {
                                 Text(
                                     text = if (progressDetails.overallPercent == 100) "🏆 Completed Goal" else "🎯 Active Goal",
-                                    style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
-                                    color = androidx.compose.material3.MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                                    style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
                                 )
-                                Spacer(modifier = Modifier.height(4.dp))
+                                Spacer(modifier = Modifier.height(6.dp))
                                 Text(
                                     text = goal.title,
-                                    style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
-                                    color = androidx.compose.material3.MaterialTheme.colorScheme.onPrimaryContainer
+                                    style = androidx.compose.material3.MaterialTheme.typography.titleLarge,
+                                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSecondaryContainer,
+                                    maxLines = 1,
+                                    overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                 )
-                                Spacer(modifier = Modifier.height(12.dp))
+                                Spacer(modifier = Modifier.height(16.dp))
                                 androidx.compose.foundation.layout.Row(
                                     modifier = Modifier.fillMaxWidth(),
                                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -226,20 +293,25 @@ fun HomeScreen(
                                     Text(
                                         text = "Deadline: ${goal.deadline ?: "None"}",
                                         style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                                        color = androidx.compose.material3.MaterialTheme.colorScheme.onPrimaryContainer
+                                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
                                     )
                                     Text(
                                         text = "${progressDetails.overallPercent}%",
                                         style = androidx.compose.material3.MaterialTheme.typography.labelLarge,
-                                        color = androidx.compose.material3.MaterialTheme.colorScheme.primary
+                                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSecondaryContainer
                                     )
                                 }
-                                Spacer(modifier = Modifier.height(4.dp))
+                                Spacer(modifier = Modifier.height(8.dp))
+                                val animatedGoalProgress by androidx.compose.animation.core.animateFloatAsState(
+                                    targetValue = progressDetails.overallPercent / 100f,
+                                    animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.8f, stiffness = 100f),
+                                    label = "goalProgress"
+                                )
                                 androidx.compose.material3.LinearProgressIndicator(
-                                    progress = { progressDetails.overallPercent / 100f },
-                                    modifier = Modifier.fillMaxWidth().height(8.dp),
-                                    color = androidx.compose.material3.MaterialTheme.colorScheme.primary,
-                                    trackColor = androidx.compose.material3.MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.2f),
+                                    progress = { animatedGoalProgress },
+                                    modifier = Modifier.fillMaxWidth().height(6.dp),
+                                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSecondaryContainer,
+                                    trackColor = androidx.compose.material3.MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.2f),
                                     strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
                                 )
                             }
