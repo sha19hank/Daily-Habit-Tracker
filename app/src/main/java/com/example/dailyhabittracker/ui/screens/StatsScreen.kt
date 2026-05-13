@@ -45,13 +45,18 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.dailyhabittracker.viewmodel.HabitViewModel
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import java.time.LocalDate
 
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-@OptIn(ExperimentalMaterial3Api::class)
 fun StatsScreen(
     navController: NavController,
     viewModel: HabitViewModel,
+    highlightGoalId: Long? = null,
     openDialogRequest: Boolean = false,
     onDialogRequestConsumed: () -> Unit = {}
 ) {
@@ -74,9 +79,15 @@ fun StatsScreen(
     val snackbarHostState = remember { androidx.compose.material3.SnackbarHostState() }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
 
-    LaunchedEffect(Unit) {
-        viewModel.refreshStats()
+    val bringIntoViewRequester = remember { BringIntoViewRequester() }
+
+    LaunchedEffect(highlightGoalId, goals) {
+        if (highlightGoalId != null && goals.any { it.goalId == highlightGoalId }) {
+            kotlinx.coroutines.delay(300)
+            bringIntoViewRequester.bringIntoView()
+        }
     }
+
 
     LaunchedEffect(openDialogRequest) {
         if (openDialogRequest) {
@@ -135,12 +146,15 @@ fun StatsScreen(
                         }
                     } else {
                         goals.forEach { goal ->
+                            val isHighlighted = highlightGoalId == goal.goalId
                             Surface(
-                                tonalElevation = 2.dp,
+                                tonalElevation = if (isHighlighted) 8.dp else 2.dp,
                                 shape = MaterialTheme.shapes.small,
+                                border = if (isHighlighted) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null,
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(vertical = 4.dp)
+                                    .then(if (isHighlighted) Modifier.bringIntoViewRequester(bringIntoViewRequester) else Modifier)
                             ) {
                                 Column(
                                     modifier = Modifier.padding(12.dp),

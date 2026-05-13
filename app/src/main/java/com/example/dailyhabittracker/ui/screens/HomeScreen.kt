@@ -15,6 +15,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.automirrored.filled.Sort
@@ -52,6 +53,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.rememberPagerState
 import com.example.dailyhabittracker.R
 import com.example.dailyhabittracker.ui.components.HabitCard
 import com.example.dailyhabittracker.viewmodel.HabitViewModel
@@ -72,6 +75,7 @@ fun HomeScreen(
     val haptics by viewModel.hapticsEnabled.collectAsState()
     val activeGoal by viewModel.activeGoal.collectAsState()
     val goals by viewModel.goals.collectAsState()
+    val goalProgress by viewModel.goalProgress.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
     val listState = rememberLazyListState()
@@ -91,6 +95,20 @@ fun HomeScreen(
     }
     val completedTodayCount by remember(displayHabits, today) {
         derivedStateOf { displayHabits.count { it.lastCompletedDate == today && viewModel.isScheduledToday(it) } }
+    }
+
+    val carouselGoals by remember(goals, goalProgress) {
+        derivedStateOf {
+            val active = goals.filter { goal ->
+                val progress = goalProgress[goal.goalId]?.overallPercent ?: 0
+                progress < 100
+            }
+            val completed = goals.filter { goal ->
+                val progress = goalProgress[goal.goalId]?.overallPercent ?: 0
+                progress == 100
+            }
+            active + completed
+        }
     }
 
     Scaffold(
@@ -167,51 +185,87 @@ fun HomeScreen(
 
 
 
-            activeGoal?.let { active ->
-                item(key = "activeGoal") {
-                    androidx.compose.material3.Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = androidx.compose.material3.CardDefaults.cardColors(
-                            containerColor = androidx.compose.material3.MaterialTheme.colorScheme.primaryContainer
-                        )
-                    ) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Text(
-                                text = "🎯 Active Goal",
-                                style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
-                                color = androidx.compose.material3.MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+            if (carouselGoals.isNotEmpty()) {
+                item(key = "activeGoalPager") {
+                    val pagerState = rememberPagerState(pageCount = { carouselGoals.size })
+                    HorizontalPager(
+                        state = pagerState,
+                        contentPadding = PaddingValues(end = 32.dp),
+                        pageSpacing = 16.dp,
+                        modifier = Modifier.fillMaxWidth()
+                    ) { page ->
+                        val goal = carouselGoals[page]
+                        val progressDetails = goalProgress[goal.goalId] ?: com.example.dailyhabittracker.data.GoalProgressDetails(0, emptyList())
+                        
+                        androidx.compose.material3.Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clickable { navController.navigate("insights?goalId=${goal.goalId}") },
+                            colors = androidx.compose.material3.CardDefaults.cardColors(
+                                containerColor = androidx.compose.material3.MaterialTheme.colorScheme.primaryContainer
                             )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = active.goal.title,
-                                style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
-                                color = androidx.compose.material3.MaterialTheme.colorScheme.onPrimaryContainer
-                            )
-                            Spacer(modifier = Modifier.height(12.dp))
-                            androidx.compose.foundation.layout.Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
                                 Text(
-                                    text = "Deadline: ${active.goal.deadline ?: "None"}",
-                                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                    text = if (progressDetails.overallPercent == 100) "🏆 Completed Goal" else "🎯 Active Goal",
+                                    style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                                    color = androidx.compose.material3.MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = goal.title,
+                                    style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
                                     color = androidx.compose.material3.MaterialTheme.colorScheme.onPrimaryContainer
                                 )
-                                Text(
-                                    text = "${active.progressDetails.overallPercent}%",
-                                    style = androidx.compose.material3.MaterialTheme.typography.labelLarge,
-                                    color = androidx.compose.material3.MaterialTheme.colorScheme.primary
+                                Spacer(modifier = Modifier.height(12.dp))
+                                androidx.compose.foundation.layout.Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = "Deadline: ${goal.deadline ?: "None"}",
+                                        style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                        color = androidx.compose.material3.MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                    Text(
+                                        text = "${progressDetails.overallPercent}%",
+                                        style = androidx.compose.material3.MaterialTheme.typography.labelLarge,
+                                        color = androidx.compose.material3.MaterialTheme.colorScheme.primary
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                androidx.compose.material3.LinearProgressIndicator(
+                                    progress = { progressDetails.overallPercent / 100f },
+                                    modifier = Modifier.fillMaxWidth().height(8.dp),
+                                    color = androidx.compose.material3.MaterialTheme.colorScheme.primary,
+                                    trackColor = androidx.compose.material3.MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.2f),
+                                    strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
                                 )
                             }
-                            Spacer(modifier = Modifier.height(4.dp))
-                            androidx.compose.material3.LinearProgressIndicator(
-                                progress = { active.progressDetails.overallPercent / 100f },
-                                modifier = Modifier.fillMaxWidth().height(8.dp),
-                                color = androidx.compose.material3.MaterialTheme.colorScheme.primary,
-                                trackColor = androidx.compose.material3.MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.2f),
-                                strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
+                        }
+                    }
+                }
+            } else {
+                item(key = "activeGoalEmpty") {
+                    Surface(
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f),
+                        shape = androidx.compose.material3.MaterialTheme.shapes.medium,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(24.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "No active goals yet",
+                                style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSecondaryContainer
                             )
+                            Button(onClick = { navController.navigate("insights") }) {
+                                Text("Create Goal")
+                            }
                         }
                     }
                 }
@@ -285,11 +339,14 @@ fun HomeScreen(
                     onEdit = {
                         navController.navigate("add?habitId=${habit.id}")
                     },
-                    onCompleted = {
+                    onToggleCompletion = {
                         if (haptics) {
                             haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
                         }
-                        viewModel.markCompleted(habit)
+                        viewModel.toggleHabitCompletion(habit)
+                    },
+                    onDelete = {
+                        viewModel.deleteHabit(habit)
                     },
                     onFreeze = {
                         viewModel.tryBuyStreakFreeze(habit) { frozen ->

@@ -46,6 +46,15 @@ interface HabitDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE)
     suspend fun insertCompletion(completion: HabitCompletionEntity): Long
 
+    @Query("DELETE FROM habit_completions WHERE habitId = :habitId AND completionDate = :date")
+    suspend fun deleteCompletionForDate(habitId: Long, date: String)
+
+    @Query("SELECT * FROM habit_completions WHERE habitId = :habitId ORDER BY completionDate DESC")
+    suspend fun getCompletionsForHabitDesc(habitId: Long): List<HabitCompletionEntity>
+
+    @Query("SELECT * FROM habit_completions")
+    fun getAllCompletionsFlow(): Flow<List<HabitCompletionEntity>>
+
     @Query("SELECT habitId FROM habit_completions WHERE completionDate = :date")
     suspend fun getCompletedHabitIdsForDate(date: String): List<Long>
 

@@ -2,6 +2,8 @@ package com.example.dailyhabittracker.data
 
 import androidx.room.withTransaction
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import java.time.LocalDate
 import java.time.LocalTime
@@ -17,6 +19,8 @@ class HabitRepository(
     fun getHabits(): Flow<List<HabitEntity>> = dao.getHabits()
 
     fun getGoals(): Flow<List<GoalEntity>> = goalDao.getGoals()
+
+    fun getAllCompletionsFlow(): Flow<List<HabitCompletionEntity>> = dao.getAllCompletionsFlow()
 
     suspend fun getGoalsOnce(): List<GoalEntity> = goalDao.getGoalsOnce()
 
@@ -140,6 +144,27 @@ class HabitRepository(
         settings.clearPreviousStreak(habit.id)
     }
 
+    suspend fun markUncompleted(habit: HabitEntity, today: LocalDate) {
+        val completedToday = dao.hasCompletionForDate(habit.id, today.toString()) > 0
+        if (!completedToday) return
+
+        database.withTransaction {
+            dao.deleteCompletionForDate(habit.id, today.toString())
+            
+            val completions = dao.getCompletionsForHabitDesc(habit.id)
+            val previousCompletedDate = completions.firstOrNull { it.completionDate.isBefore(today) }?.completionDate
+            
+            val newStreak = maxOf(0, habit.currentStreak - 1)
+            
+            dao.updateHabit(
+                habit.copy(
+                    lastCompletedDate = previousCompletedDate,
+                    currentStreak = newStreak
+                )
+            )
+        }
+    }
+
     suspend fun refreshBrokenStreaks(today: LocalDate) {
         val habits = dao.getHabits().first()
         habits.forEach { habit ->
@@ -243,6 +268,53 @@ class HabitRepository(
                     startDate.toString(),
                     today.toString()
                 )
+            } else 0
+            
+            val percent = if (totalOccurrences > 0) {
+                (completed.toDouble() / totalOccurrences.toDouble() * 100).toInt().coerceIn(0, 100)
+            } else 0
+            
+            HabitProgress(habit, completed, totalOccurrences, percent)
+        }
+
+        val totalPercent = habitProgresses.sumOf { it.percent.toDouble() / 100.0 }
+        val average = (totalPercent / habits.size.toDouble()).coerceIn(0.0, 1.0)
+        return GoalProgressDetails((average * 100).toInt(), habitProgresses)
+    }
+
+    fun getGoalProgressMapFlow(today: LocalDate = LocalDate.now()): Flow<Map<Long, GoalProgressDetails>> {
+        return combine(
+            goalDao.getGoals(),
+            dao.getHabits(),
+            dao.getAllCompletionsFlow()
+        ) { goals, habits, completions ->
+            goals.associate { goal ->
+                val goalHabits = habits.filter { it.goalId == goal.goalId }
+                goal.goalId to calculateGoalProgress(goal, goalHabits, completions, today)
+            }
+        }.distinctUntilChanged()
+    }
+
+    private fun calculateGoalProgress(
+        goal: GoalEntity,
+        habits: List<HabitEntity>,
+        completions: List<HabitCompletionEntity>,
+        today: LocalDate
+    ): GoalProgressDetails {
+        if (habits.isEmpty()) return GoalProgressDetails(0, emptyList())
+
+        val startDate = goal.startDate
+        val endDate = goal.deadline ?: today
+        
+        val habitProgresses = habits.map { habit ->
+            val totalOccurrences = scheduledOccurrencesInRange(habit, startDate, endDate)
+            
+            val completed = if (totalOccurrences > 0) {
+                completions.count {
+                    it.habitId == habit.id && 
+                    !it.completionDate.isBefore(startDate) &&
+                    !it.completionDate.isAfter(today)
+                }
             } else 0
             
             val percent = if (totalOccurrences > 0) {

@@ -111,10 +111,15 @@ private fun AppNavHost(viewModel: HabitViewModel) {
                     onDialogRequestConsumed = { journalDialogRequest.value = false }
                 )
             }
-            composable("insights") { 
+            composable(
+                route = "insights?goalId={goalId}",
+                arguments = listOf(navArgument("goalId") { type = NavType.LongType; defaultValue = -1L })
+            ) { backStackEntry ->
+                val goalId = backStackEntry.arguments?.getLong("goalId").takeIf { it != -1L }
                 StatsScreen(
                     navController = navController, 
                     viewModel = viewModel,
+                    highlightGoalId = goalId,
                     openDialogRequest = goalDialogRequest.value,
                     onDialogRequestConsumed = { goalDialogRequest.value = false }
                 ) 
@@ -150,7 +155,7 @@ private fun BottomNavBar(navController: NavHostController) {
 
     NavigationBar {
         items.forEach { item ->
-            val selected = currentDestination?.hierarchy?.any { it.route == item.route } == true
+            val selected = currentDestination?.hierarchy?.any { it.route?.substringBefore("?") == item.route } == true
             NavigationBarItem(
                 selected = selected,
                 onClick = {

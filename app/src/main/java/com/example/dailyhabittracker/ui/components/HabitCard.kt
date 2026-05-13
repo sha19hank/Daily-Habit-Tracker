@@ -20,6 +20,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.clickable
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -55,7 +57,8 @@ fun HabitCard(
     modifier: Modifier = Modifier,
     goalTitle: String? = null,
     onEdit: () -> Unit,
-    onCompleted: () -> Unit,
+    onToggleCompletion: () -> Unit,
+    onDelete: () -> Unit,
     onFreeze: () -> Unit,
     onTogglePause: () -> Unit,
     onEnableReminder: () -> Unit,
@@ -64,6 +67,7 @@ fun HabitCard(
     val isCompletedToday = habit.lastCompletedDate == today
     val isPaused = habit.paused
     var expanded by remember { mutableStateOf(false) }
+    var showDeleteDialog by remember { mutableStateOf(false) }
 
     val baseTint = if (habit.color != 0) Color(habit.color) else MaterialTheme.colorScheme.surface
     val containerColor by animateColorAsState(
@@ -155,7 +159,7 @@ fun HabitCard(
                     Checkbox(
                         checked = isCompletedToday,
                         enabled = !isPaused && isScheduledToday,
-                        onCheckedChange = { if (!isCompletedToday) onCompleted() },
+                        onCheckedChange = { onToggleCompletion() },
                         modifier = Modifier.semantics {
                             contentDescription = if (isCompletedToday) "Completed" else "Mark complete"
                         }
@@ -170,15 +174,22 @@ fun HabitCard(
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
                     Spacer(modifier = Modifier.height(8.dp))
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
                         OutlinedButton(onClick = onTogglePause) {
                             Text(text = if (isPaused) "Resume" else "Pause")
                         }
                         Button(onClick = onFreeze, enabled = canFreeze) {
-                            Text(text = "Freeze Streak")
+                            Text(text = "Freeze")
                         }
                         OutlinedButton(onClick = onEdit) {
                             Text(text = "Edit")
+                        }
+                        androidx.compose.material3.IconButton(onClick = { showDeleteDialog = true }) {
+                            androidx.compose.material3.Icon(
+                                imageVector = Icons.Default.Delete,
+                                contentDescription = "Delete Habit",
+                                tint = MaterialTheme.colorScheme.error
+                            )
                         }
                     }
 
@@ -240,5 +251,29 @@ fun HabitCard(
                 }
             }
         }
+    }
+
+    if (showDeleteDialog) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            title = { Text("Delete Habit?") },
+            text = { Text("Are you sure you want to delete '${habit.name}'? All history and completions will be permanently removed.") },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showDeleteDialog = false
+                        onDelete()
+                    },
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                        containerColor = MaterialTheme.colorScheme.error
+                    )
+                ) {
+                    Text("Delete")
+                }
+            },
+            dismissButton = {
+                androidx.compose.material3.TextButton(onClick = { showDeleteDialog = false }) { Text("Cancel") }
+            }
+        )
     }
 }
