@@ -33,6 +33,17 @@ val LightSecondaryAmber = Color(0xFFA46B3C)
 val LightSuccessGreen = Color(0xFF4C7A57)
 val LightDangerRed = Color(0xFFB14E48)
 
+// Light Theme Hero / Goal Card — immutable editorial tokens
+// Slightly softened maroon (editorial, not luxury-wine)
+val LightHeroCardBackground = Color(0xFF8B4A35)  // Softened editorial maroon
+val LightHeroCardOnSurface = Color(0xFFFFFDF9)   // Warm off-white text
+val LightHeroCardTrack = Color(0xFF9E5840)        // Muted warm maroon for progress track
+val LightHeroCardFill = Color(0xFFA46B3C)         // Burnt amber progress fill
+val LightHeroCardSubtext = Color(0xFFEFE7DE)      // Warm muted label text on dark bg
+
+// Light Theme Secondary Surface (no alpha, solid) — replaces secondaryContainer
+val LightSolidPanel = Color(0xFFF7F2EC)           // Same as SurfaceVariant — solid, no fog
+
 // Muted Violet/Indigo Secondary Accent
 val SecondaryViolet = Color(0xFF5B4FCF)
 val OnSecondaryViolet = Color(0xFFFFFFFF)

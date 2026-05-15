@@ -256,16 +256,18 @@ fun StatsScreen(
                                             }
                                         }
                                     } else {
+                                        val isLightStatsMode = MaterialTheme.colorScheme.background.luminance() > 0.5f
                                         Surface(
-                                            color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f),
+                                            color = if (isLightStatsMode) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f),
                                             shape = MaterialTheme.shapes.small,
+                                            border = if (isLightStatsMode) BorderStroke(1.dp, MaterialTheme.colorScheme.outline) else null,
                                             modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                                         ) {
                                             Text(
                                                 text = "No habits linked. Edit a habit on the Home screen to connect it to this goal.",
                                                 style = MaterialTheme.typography.bodySmall,
                                                 modifier = Modifier.padding(8.dp),
-                                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
                                             )
                                         }
                                     }

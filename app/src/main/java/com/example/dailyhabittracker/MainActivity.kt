@@ -10,13 +10,18 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.background
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -74,7 +79,7 @@ private fun AppNavHost(viewModel: HabitViewModel) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val rawRoute = navBackStackEntry?.destination?.route ?: ""
     val currentRoute = rawRoute.substringBefore("?")
-    
+
     val bottomBarRoutes = remember { setOf("today", "calendar", "journal", "insights", "settings") }
     val showBottomBar = currentRoute in bottomBarRoutes
     val showFab = currentRoute == "today" || currentRoute == "journal" || currentRoute == "insights"
@@ -83,49 +88,11 @@ private fun AppNavHost(viewModel: HabitViewModel) {
     val fabInteractionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     val isFabPressed by fabInteractionSource.collectIsPressedAsState()
 
-    Scaffold(
-        floatingActionButton = {
-            if (showFab) {
-                val isJournal = currentRoute == "journal"
-                val isInsights = currentRoute == "insights"
-                FloatingActionButton(
-                    onClick = {
-                        if (isJournal) {
-                            journalDialogRequest.value = true
-                        } else if (isInsights) {
-                            goalDialogRequest.value = true
-                        } else {
-                            navController.navigate("add")
-                        }
-                    },
-                    interactionSource = fabInteractionSource,
-                    containerColor = if (darkMode) androidx.compose.material3.MaterialTheme.colorScheme.primary else if (isFabPressed) androidx.compose.ui.graphics.Color(0xFF7A3E2B) else androidx.compose.ui.graphics.Color(0xFFA46B3C),
-                    contentColor = androidx.compose.material3.MaterialTheme.colorScheme.onPrimary,
-                    elevation = androidx.compose.material3.FloatingActionButtonDefaults.elevation(
-                        defaultElevation = if (darkMode) 6.dp else 4.dp,
-                        pressedElevation = if (darkMode) 12.dp else 6.dp
-                    ),
-                    modifier = if (darkMode) Modifier else Modifier.shadow(
-                        elevation = if (isFabPressed) 6.dp else 4.dp,
-                        shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
-                        spotColor = androidx.compose.ui.graphics.Color(0xFF2A140A).copy(alpha = 0.4f),
-                        ambientColor = androidx.compose.ui.graphics.Color(0xFF2A140A).copy(alpha = 0.2f)
-                    )
-                ) {
-                    Icon(
-                        imageVector = if (isJournal) Icons.Filled.EditNote else Icons.Filled.Add,
-                        contentDescription = if (isJournal) "New journal entry" else if (isInsights) "Create goal" else "Add habit"
-                    )
-                }
-            }
-        },
-        bottomBar = {
-            if (showBottomBar) {
-                BottomNavBar(navController = navController, darkMode = darkMode)
-            }
-        }
-    ) { padding ->
-        androidx.compose.foundation.layout.Box(
+    // Root overlay Box — dock and FAB float ABOVE content, Scaffold reserves NO space for them
+    Box(modifier = Modifier.fillMaxSize()) {
+
+        // Background gradient fills the whole root
+        Box(
             modifier = Modifier
                 .fillMaxSize()
                 .background(
@@ -145,24 +112,30 @@ private fun AppNavHost(viewModel: HabitViewModel) {
                         }
                     )
                 )
-        ) {
+        )
+
+        // Scaffold owns ONLY screen content — no bottomBar, no FAB, no layout reservation
+        Scaffold(
+            containerColor = androidx.compose.ui.graphics.Color.Transparent
+        ) { padding ->
             NavHost(
                 navController = navController,
                 startDestination = "today",
-                modifier = Modifier.padding(padding),
-                enterTransition = { 
-                    androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(300)) + 
-                    androidx.compose.animation.scaleIn(initialScale = 0.98f, animationSpec = androidx.compose.animation.core.tween(300)) 
+                // Only top padding from Scaffold (status bar insets) — no bottom padding
+                modifier = Modifier.padding(top = padding.calculateTopPadding()),
+                enterTransition = {
+                    androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(300)) +
+                    androidx.compose.animation.scaleIn(initialScale = 0.98f, animationSpec = androidx.compose.animation.core.tween(300))
                 },
-                exitTransition = { 
-                    androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(300)) 
+                exitTransition = {
+                    androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(300))
                 },
-                popEnterTransition = { 
-                    androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(300)) 
+                popEnterTransition = {
+                    androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(300))
                 },
-                popExitTransition = { 
-                    androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(300)) + 
-                    androidx.compose.animation.scaleOut(targetScale = 0.98f, animationSpec = androidx.compose.animation.core.tween(300)) 
+                popExitTransition = {
+                    androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(300)) +
+                    androidx.compose.animation.scaleOut(targetScale = 0.98f, animationSpec = androidx.compose.animation.core.tween(300))
                 }
             ) {
                 composable("today") { HomeScreen(navController = navController, viewModel = viewModel) }
@@ -180,12 +153,12 @@ private fun AppNavHost(viewModel: HabitViewModel) {
                 ) { backStackEntry ->
                     val goalId = backStackEntry.arguments?.getLong("goalId").takeIf { it != -1L }
                     StatsScreen(
-                        navController = navController, 
+                        navController = navController,
                         viewModel = viewModel,
                         highlightGoalId = goalId,
                         openDialogRequest = goalDialogRequest.value,
                         onDialogRequestConsumed = { goalDialogRequest.value = false }
-                    ) 
+                    )
                 }
                 composable("settings") { SettingsScreen(navController = navController, viewModel = viewModel) }
                 composable(
@@ -201,11 +174,68 @@ private fun AppNavHost(viewModel: HabitViewModel) {
                 }
             }
         }
+
+        // FAB — overlaid above content, offset so it clears the dock comfortably
+        if (showFab) {
+            val isJournal = currentRoute == "journal"
+            val isInsights = currentRoute == "insights"
+            FloatingActionButton(
+                onClick = {
+                    when {
+                        isJournal -> journalDialogRequest.value = true
+                        isInsights -> goalDialogRequest.value = true
+                        else -> navController.navigate("add")
+                    }
+                },
+                interactionSource = fabInteractionSource,
+                containerColor = if (darkMode)
+                    androidx.compose.material3.MaterialTheme.colorScheme.primary
+                else if (isFabPressed)
+                    androidx.compose.ui.graphics.Color(0xFF7A3E2B)
+                else
+                    androidx.compose.ui.graphics.Color(0xFFA46B3C),
+                contentColor = androidx.compose.material3.MaterialTheme.colorScheme.onPrimary,
+                elevation = androidx.compose.material3.FloatingActionButtonDefaults.elevation(
+                    defaultElevation = if (darkMode) 6.dp else 4.dp,
+                    pressedElevation = if (darkMode) 12.dp else 6.dp
+                ),
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    // FAB sits 108dp from bottom: dock(68) + dock-bottom-pad(20) + gap(20)
+                    .offset(x = (-24).dp, y = (-108).dp)
+                    .then(
+                        if (!darkMode) Modifier.shadow(
+                            elevation = if (isFabPressed) 6.dp else 4.dp,
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp),
+                            spotColor = androidx.compose.ui.graphics.Color(0xFF2A140A).copy(alpha = 0.4f),
+                            ambientColor = androidx.compose.ui.graphics.Color(0xFF2A140A).copy(alpha = 0.2f)
+                        ) else Modifier
+                    )
+            ) {
+                Icon(
+                    imageVector = if (isJournal) Icons.Filled.EditNote else Icons.Filled.Add,
+                    contentDescription = if (isJournal) "New journal entry" else if (isInsights) "Create goal" else "Add habit"
+                )
+            }
+        }
+
+        // Floating dock — overlaid at bottom, no Scaffold layout reservation
+        if (showBottomBar) {
+            BottomNavBar(
+                navController = navController,
+                darkMode = darkMode,
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
+        }
     }
 }
 
 @Composable
-private fun BottomNavBar(navController: NavHostController, darkMode: Boolean) {
+private fun BottomNavBar(
+    navController: NavHostController,
+    darkMode: Boolean,
+    modifier: Modifier = Modifier
+) {
     val items = listOf(
         BottomNavItem("today", "Today", Icons.Filled.CheckCircle),
         BottomNavItem("calendar", "Calendar", Icons.Filled.DateRange),
@@ -217,53 +247,88 @@ private fun BottomNavBar(navController: NavHostController, darkMode: Boolean) {
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
 
-    androidx.compose.material3.Surface(
-        modifier = Modifier
-            .padding(horizontal = 16.dp, vertical = 16.dp)
+    val dockShape = RoundedCornerShape(36.dp)
+    val dockColor = if (darkMode)
+        androidx.compose.material3.MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
+    else
+        androidx.compose.ui.graphics.Color(0xFFFFFDF9)
+
+    // Single floating dock — no outer wrapper Surface
+    // shadow() must be applied BEFORE clip() so it renders outside the clipped boundary
+    NavigationBar(
+        modifier = modifier
+            .padding(horizontal = 20.dp)
+            .padding(bottom = 20.dp, top = 0.dp)
             .fillMaxWidth()
+            .height(68.dp)
             .then(
-                if (darkMode) Modifier else Modifier.shadow(
-                    elevation = 12.dp,
-                    shape = androidx.compose.foundation.shape.RoundedCornerShape(32.dp),
-                    spotColor = androidx.compose.ui.graphics.Color(0xFF2A140A).copy(alpha = 0.08f),
-                    ambientColor = androidx.compose.ui.graphics.Color(0xFF2A140A).copy(alpha = 0.04f)
+                if (!darkMode) Modifier.shadow(
+                    elevation = 10.dp,
+                    shape = dockShape,
+                    spotColor = androidx.compose.ui.graphics.Color(0xFF2A140A).copy(alpha = 0.10f),
+                    ambientColor = androidx.compose.ui.graphics.Color(0xFF2A140A).copy(alpha = 0.05f)
+                ) else Modifier.shadow(
+                    elevation = 8.dp,
+                    shape = dockShape,
+                    spotColor = androidx.compose.ui.graphics.Color(0xFF000000).copy(alpha = 0.30f),
+                    ambientColor = androidx.compose.ui.graphics.Color(0xFF000000).copy(alpha = 0.15f)
                 )
-            ),
-        shape = androidx.compose.foundation.shape.RoundedCornerShape(32.dp),
-        color = androidx.compose.material3.MaterialTheme.colorScheme.surface.copy(alpha = if (darkMode) 0.9f else 0.95f),
-        shadowElevation = if (darkMode) 8.dp else 0.dp,
-        tonalElevation = if (darkMode) 8.dp else 0.dp,
-        border = if (!darkMode) androidx.compose.foundation.BorderStroke(1.dp, androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant) else null
+            )
+            .clip(dockShape),
+        containerColor = dockColor,
+        tonalElevation = 0.dp,
+        windowInsets = androidx.compose.foundation.layout.WindowInsets(0)
     ) {
-        NavigationBar(
-            modifier = Modifier.fillMaxWidth().height(72.dp),
-            containerColor = androidx.compose.ui.graphics.Color.Transparent,
-            tonalElevation = 0.dp,
-            windowInsets = androidx.compose.foundation.layout.WindowInsets(0)
-        ) {
-            items.forEach { item ->
-                val selected = currentDestination?.hierarchy?.any { it.route?.substringBefore("?") == item.route } == true
-                NavigationBarItem(
-                    selected = selected,
-                    onClick = {
-                        navController.navigate(item.route) {
-                            popUpTo(navController.graph.startDestinationId) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    },
-                    icon = { androidx.compose.material3.Icon(item.icon, contentDescription = item.label) },
-                    alwaysShowLabel = false,
-                    label = { Text(item.label, style = androidx.compose.material3.MaterialTheme.typography.labelSmall) },
-                    colors = androidx.compose.material3.NavigationBarItemDefaults.colors(
-                        selectedIconColor = if (darkMode) androidx.compose.material3.MaterialTheme.colorScheme.onPrimaryContainer else androidx.compose.ui.graphics.Color(0xFF7A3E2B),
-                        unselectedIconColor = if (darkMode) androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant else androidx.compose.ui.graphics.Color(0xFF8B8178),
-                        selectedTextColor = if (darkMode) androidx.compose.material3.MaterialTheme.colorScheme.onPrimaryContainer else androidx.compose.ui.graphics.Color(0xFF7A3E2B),
-                        unselectedTextColor = if (darkMode) androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant else androidx.compose.ui.graphics.Color(0xFF8B8178),
-                        indicatorColor = if (darkMode) androidx.compose.material3.MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f) else androidx.compose.ui.graphics.Color(0xFFF7F2EC)
+        items.forEach { item ->
+            val selected = currentDestination?.hierarchy?.any {
+                it.route?.substringBefore("?") == item.route
+            } == true
+            NavigationBarItem(
+                selected = selected,
+                onClick = {
+                    navController.navigate(item.route) {
+                        popUpTo(navController.graph.startDestinationId) { saveState = true }
+                        launchSingleTop = true
+                        restoreState = true
+                    }
+                },
+                icon = {
+                    androidx.compose.material3.Icon(
+                        item.icon,
+                        contentDescription = item.label
                     )
+                },
+                alwaysShowLabel = false,
+                label = {
+                    Text(
+                        item.label,
+                        style = androidx.compose.material3.MaterialTheme.typography.labelSmall
+                    )
+                },
+                colors = androidx.compose.material3.NavigationBarItemDefaults.colors(
+                    selectedIconColor = if (darkMode)
+                        androidx.compose.material3.MaterialTheme.colorScheme.onPrimaryContainer
+                    else
+                        androidx.compose.ui.graphics.Color(0xFF7A3E2B),
+                    unselectedIconColor = if (darkMode)
+                        androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                    else
+                        androidx.compose.ui.graphics.Color(0xFF9A8F88),
+                    selectedTextColor = if (darkMode)
+                        androidx.compose.material3.MaterialTheme.colorScheme.onPrimaryContainer
+                    else
+                        androidx.compose.ui.graphics.Color(0xFF7A3E2B),
+                    unselectedTextColor = if (darkMode)
+                        androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                    else
+                        androidx.compose.ui.graphics.Color(0xFF9A8F88),
+                    // Indicator: slightly inset warm surface so capsule never clips dock edge
+                    indicatorColor = if (darkMode)
+                        androidx.compose.material3.MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                    else
+                        androidx.compose.ui.graphics.Color(0xFFF0EBE3)
                 )
-            }
+            )
         }
     }
 }

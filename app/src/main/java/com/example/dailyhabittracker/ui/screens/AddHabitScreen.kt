@@ -1,8 +1,6 @@
 package com.example.dailyhabittracker.ui.screens
 
 import android.app.TimePickerDialog
-import android.Manifest
-import android.os.Build
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ExperimentalLayoutApi
@@ -51,13 +49,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.example.dailyhabittracker.viewmodel.HabitViewModel
-import androidx.activity.compose.rememberLauncherForActivityResult
-import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.content.ContextCompat
 import android.app.DatePickerDialog
 import java.time.LocalDate
 import java.time.LocalTime
@@ -81,9 +75,8 @@ fun AddHabitScreen(
     var reminderEnabled by remember { mutableStateOf(false) }
     var reminderTime by remember { mutableStateOf(LocalTime.of(9, 0)) }
     var selectedColor by remember { mutableStateOf(DEFAULT_COLORS.first()) }
-    var stepEnabled by remember { mutableStateOf(false) }
-    var stepGoal by remember { mutableStateOf("5000") }
-    var showError by remember { mutableStateOf(false) }
+    var showNameError by remember { mutableStateOf(false) }
+    var showDaysError by remember { mutableStateOf(false) }
     var goalExpanded by remember { mutableStateOf(false) }
     var selectedGoalId by remember { mutableStateOf<Long?>(null) }
     val goals by viewModel.goals.collectAsState()
@@ -101,12 +94,6 @@ fun AddHabitScreen(
         focusedBorderColor = androidx.compose.material3.MaterialTheme.colorScheme.primary
     )
     
-    val activityRecognitionLauncher = rememberLauncherForActivityResult(
-        contract = ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        stepEnabled = granted
-    }
-    
     var showGoalEditor by remember { mutableStateOf(false) }
     var goalTitle by rememberSaveable { mutableStateOf("") }
     var goalDescription by rememberSaveable { mutableStateOf("") }
@@ -122,8 +109,6 @@ fun AddHabitScreen(
             reminderEnabled = habitToEdit.reminderEnabled
             reminderTime = habitToEdit.reminderTime ?: LocalTime.of(9, 0)
             selectedColor = habitToEdit.color.takeIf { it != 0 } ?: DEFAULT_COLORS.first()
-            stepEnabled = habitToEdit.stepEnabled
-            stepGoal = habitToEdit.stepGoal?.toString() ?: "5000"
             selectedGoalId = habitToEdit.goalId
         } else if (prefilledGoalId != null) {
             selectedGoalId = prefilledGoalId
@@ -154,10 +139,11 @@ fun AddHabitScreen(
                 value = name,
                 onValueChange = {
                     name = it
-                    if (showError) showError = false
+                    if (showNameError) showNameError = false
                 },
                 label = { Text("Habit name") },
-                isError = showError,
+                isError = showNameError,
+                supportingText = if (showNameError) { { Text("Please enter a habit name") } } else null,
                 singleLine = true,
                 modifier = Modifier.fillMaxWidth(),
                 colors = textFieldColors,
@@ -239,18 +225,43 @@ fun AddHabitScreen(
             }
 
             Spacer(modifier = Modifier.height(24.dp))
-            Text(text = "Schedule", style = androidx.compose.material3.MaterialTheme.typography.titleSmall)
-            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(
+                text = "Schedule",
+                style = androidx.compose.material3.MaterialTheme.typography.titleSmall,
+                color = if (showDaysError) com.example.dailyhabittracker.ui.theme.LightDangerRed else androidx.compose.material3.MaterialTheme.colorScheme.onSurface
+            )
+            val daysErrorBorderColor = if (showDaysError) com.example.dailyhabittracker.ui.theme.LightDangerRed.copy(alpha = 0.5f) else androidx.compose.ui.graphics.Color.Transparent
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .then(
+                        if (showDaysError) Modifier.border(
+                            width = 1.dp,
+                            color = daysErrorBorderColor,
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp)
+                        ).padding(8.dp) else Modifier
+                    )
+            ) {
                 DAYS.forEach { (label, value) ->
                     val selected = selectedDays.contains(value)
                     FilterChip(
                         selected = selected,
                         onClick = {
                             selectedDays = if (selected) selectedDays - value else selectedDays + value
+                            if (showDaysError && selectedDays.isNotEmpty()) showDaysError = false
                         },
                         label = { Text(label) }
                     )
                 }
+            }
+            if (showDaysError) {
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "Select at least one day",
+                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                    color = com.example.dailyhabittracker.ui.theme.LightDangerRed
+                )
             }
             Spacer(modifier = Modifier.height(24.dp))
             Text(text = "Color", style = androidx.compose.material3.MaterialTheme.typography.titleSmall)
@@ -296,81 +307,49 @@ fun AddHabitScreen(
                     Text(text = "Reminder time: ${reminderTime}")
                 }
             }
-
             Spacer(modifier = Modifier.height(24.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
-            ) {
-                Text(text = "Step goal")
-                Switch(checked = stepEnabled, onCheckedChange = { enabled ->
-                    if (!enabled) {
-                        stepEnabled = false
-                        return@Switch
-                    }
-                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                        val permission = Manifest.permission.ACTIVITY_RECOGNITION
-                        val granted = ContextCompat.checkSelfPermission(context, permission) ==
-                            android.content.pm.PackageManager.PERMISSION_GRANTED
-                        if (granted) {
-                            stepEnabled = true
+            Button(
+                onClick = {
+                    val nameValid = name.isNotBlank()
+                    val daysValid = selectedDays.isNotEmpty()
+                    if (!nameValid || !daysValid) {
+                        showNameError = !nameValid
+                        showDaysError = !daysValid
+                    } else {
+                        if (habitId != null) {
+                            viewModel.updateHabitFull(
+                                habitId = habitId,
+                                name = name,
+                                description = description.ifBlank { null },
+                                category = category.ifBlank { null },
+                                color = selectedColor,
+                                scheduledDays = selectedDays.toList().sorted(),
+                                reminderEnabled = reminderEnabled,
+                                reminderTime = if (reminderEnabled) reminderTime else null,
+                                paused = habitToEdit?.paused ?: false,
+                                stepEnabled = false,
+                                stepGoal = null,
+                                goalId = selectedGoalId
+                            )
                         } else {
-                            activityRecognitionLauncher.launch(permission)
+                            viewModel.addHabit(
+                                name = name,
+                                description = description.ifBlank { null },
+                                category = category.ifBlank { null },
+                                color = selectedColor,
+                                scheduledDays = selectedDays.toList().sorted(),
+                                reminderEnabled = reminderEnabled,
+                                reminderTime = if (reminderEnabled) reminderTime else null,
+                                paused = false,
+                                stepEnabled = false,
+                                stepGoal = null,
+                                goalId = selectedGoalId
+                            )
                         }
-                    } else {
-                        stepEnabled = true
+                        navController.popBackStack()
                     }
-                })
-            }
-            if (stepEnabled) {
-                Spacer(modifier = Modifier.height(16.dp))
-                OutlinedTextField(
-                    value = stepGoal,
-                    onValueChange = { stepGoal = it.filter { char -> char.isDigit() } },
-                    label = { Text("Daily steps") },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = textFieldColors,
-                    shape = fieldShape
-                )
-            }
-            Spacer(modifier = Modifier.height(24.dp))
-            Button(onClick = {
-                if (name.isBlank() || selectedDays.isEmpty()) {
-                    showError = true
-                } else {
-                    if (habitId != null) {
-                        viewModel.updateHabitFull(
-                            habitId = habitId,
-                            name = name,
-                            description = description.ifBlank { null },
-                            category = category.ifBlank { null },
-                            color = selectedColor,
-                            scheduledDays = selectedDays.toList().sorted(),
-                            reminderEnabled = reminderEnabled,
-                            reminderTime = if (reminderEnabled) reminderTime else null,
-                            paused = habitToEdit?.paused ?: false,
-                            stepEnabled = stepEnabled,
-                            stepGoal = if (stepEnabled) stepGoal.toIntOrNull() else null,
-                            goalId = selectedGoalId
-                        )
-                    } else {
-                        viewModel.addHabit(
-                            name = name,
-                            description = description.ifBlank { null },
-                            category = category.ifBlank { null },
-                            color = selectedColor,
-                            scheduledDays = selectedDays.toList().sorted(),
-                            reminderEnabled = reminderEnabled,
-                            reminderTime = if (reminderEnabled) reminderTime else null,
-                            paused = false,
-                            stepEnabled = stepEnabled,
-                            stepGoal = stepGoal.toIntOrNull(),
-                            goalId = selectedGoalId
-                        )
-                    }
-                    navController.popBackStack()
                 }
-            }) {
+            ) {
                 Text(if (habitId != null) "Save Changes" else "Save Habit")
             }
         }

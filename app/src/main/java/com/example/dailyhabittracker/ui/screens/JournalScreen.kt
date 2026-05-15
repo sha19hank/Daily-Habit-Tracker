@@ -28,30 +28,26 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
-import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.slideInVertically
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.TextField
 import androidx.compose.material3.TextFieldDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -93,8 +89,11 @@ fun JournalScreen(
     onDialogRequestConsumed: () -> Unit
 ) {
     val entries by viewModel.journalEntries.collectAsState()
-    
-    var isSheetOpen by rememberSaveable { mutableStateOf(false) }
+
+    // Use remember (NOT rememberSaveable) so that editor state never leaks
+    // across config changes with a stale entry reference.
+    var isSheetOpen by remember { mutableStateOf(false) }
+    // Snapshot the selected entry at open time — isolates state from live list
     var editingEntry by remember { mutableStateOf<JournalEntryEntity?>(null) }
     var entryToDelete by remember { mutableStateOf<JournalEntryEntity?>(null) }
 
@@ -111,8 +110,7 @@ fun JournalScreen(
 
     val groupedEntries = remember(entries) {
         entries.groupBy { entry ->
-            val date = entry.date
-            when (date) {
+            when (entry.date) {
                 today -> "Today"
                 yesterday -> "Yesterday"
                 else -> "Older"
@@ -157,27 +155,28 @@ fun JournalScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding),
-                contentPadding = PaddingValues(24.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                contentPadding = PaddingValues(horizontal = 24.dp, vertical = 16.dp),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 val keys = listOf("Today", "Yesterday", "Older").filter { groupedEntries.containsKey(it) }
-                keys.forEach { key ->
-                    item(key = key) {
+                keys.forEach { sectionKey ->
+                    item(key = "header_$sectionKey") {
                         Text(
-                            text = key,
+                            text = sectionKey,
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.primary,
-                            modifier = Modifier.padding(top = 16.dp, bottom = 8.dp)
+                            modifier = Modifier.padding(top = 12.dp, bottom = 4.dp)
                         )
                     }
-                    items(groupedEntries[key]!!, key = { it.id }) { entry ->
+                    items(groupedEntries[sectionKey]!!, key = { it.id }) { entry ->
                         JournalCard(
                             entry = entry,
                             onClick = {
-                                editingEntry = entry
+                                // Snapshot: copy entry data at click time to prevent live reference mutation
+                                editingEntry = entry.copy()
                                 isSheetOpen = true
                             },
-                            onDeleteRequest = { entryToDelete = entry }
+                            onDeleteRequest = { entryToDelete = entry.copy() }
                         )
                     }
                 }
@@ -185,35 +184,46 @@ fun JournalScreen(
         }
     }
 
+    // Editor — keyed on the editing entry's ID so state is fully reset per entry
     AnimatedVisibility(
         visible = isSheetOpen,
-        enter = slideInVertically(initialOffsetY = { it }, animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.8f, stiffness = 200f)),
-        exit = slideOutVertically(targetOffsetY = { it }, animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.8f, stiffness = 200f))
+        enter = slideInVertically(
+            initialOffsetY = { it },
+            animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.8f, stiffness = 200f)
+        ),
+        exit = slideOutVertically(
+            targetOffsetY = { it },
+            animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.8f, stiffness = 200f)
+        )
     ) {
         Surface(
             modifier = Modifier.fillMaxSize(),
             color = MaterialTheme.colorScheme.background
         ) {
-            JournalEditor(
-                initialEntry = editingEntry,
-                onSave = { title, body, date, mood ->
-                    val finalTitle = title.ifBlank { generateTitle(body, LocalTime.now()) }
-                    if (editingEntry != null) {
-                        viewModel.updateJournalEntry(
-                            editingEntry!!.copy(
-                                title = finalTitle,
-                                body = body,
-                                date = date,
-                                mood = mood
+            // key() forces full recomposition + state reset when editingEntry changes
+            key(editingEntry?.id) {
+                JournalEditor(
+                    initialEntry = editingEntry,
+                    onSave = { title, body, date, mood ->
+                        val finalTitle = title.ifBlank { generateTitle(body, LocalTime.now()) }
+                        val current = editingEntry
+                        if (current != null) {
+                            viewModel.updateJournalEntry(
+                                current.copy(
+                                    title = finalTitle,
+                                    body = body,
+                                    date = date,
+                                    mood = mood
+                                )
                             )
-                        )
-                    } else {
-                        viewModel.upsertJournalEntry(finalTitle, body, date, mood)
-                    }
-                    isSheetOpen = false
-                },
-                onCancel = { isSheetOpen = false }
-            )
+                        } else {
+                            viewModel.upsertJournalEntry(finalTitle, body, date, mood)
+                        }
+                        isSheetOpen = false
+                    },
+                    onCancel = { isSheetOpen = false }
+                )
+            }
         }
     }
 
@@ -234,9 +244,7 @@ fun JournalScreen(
                 }
             },
             dismissButton = {
-                TextButton(onClick = { entryToDelete = null }) {
-                    Text("Cancel")
-                }
+                TextButton(onClick = { entryToDelete = null }) { Text("Cancel") }
             }
         )
     }
@@ -252,18 +260,30 @@ fun JournalCard(
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.96f else 1f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessLow),
-        label = "scale"
+        targetValue = if (pressed) 0.97f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        label = "scale_${entry.id}"
     )
     val isLightMode = MaterialTheme.colorScheme.background.luminance() > 0.5f
+
+    val moodEmoji = when (entry.mood) {
+        "RAD" -> "😁"
+        "GOOD" -> "🙂"
+        "MEH" -> "😐"
+        "BAD" -> "🙁"
+        "AWFUL" -> "😢"
+        else -> null
+    }
 
     Surface(
         color = if (isLightMode) Color(0xFFFFFDF9) else MaterialTheme.colorScheme.surface,
         shadowElevation = if (isLightMode) 0.dp else 1.dp,
         tonalElevation = if (isLightMode) 0.dp else 1.dp,
         shape = MaterialTheme.shapes.medium,
-        border = if (isLightMode) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline) else null,
+        border = if (isLightMode) androidx.compose.foundation.BorderStroke(
+            1.dp,
+            MaterialTheme.colorScheme.outline
+        ) else null,
         modifier = Modifier
             .fillMaxWidth()
             .graphicsLayer {
@@ -284,65 +304,78 @@ fun JournalCard(
                 onClick = onClick
             )
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
         ) {
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top
-            ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(text = entry.title, style = MaterialTheme.typography.titleMedium)
-                    val timeString = java.text.SimpleDateFormat("hh:mm a", java.util.Locale.getDefault()).format(java.util.Date(entry.timestamp))
+            // Left: title + timestamp + preview snippet
+            Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                // Title row — title + mood emoji inline
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
                     Text(
-                        text = "${entry.date} at $timeString",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        text = entry.title,
+                        style = MaterialTheme.typography.titleSmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f, fill = false)
                     )
-                }
-                Box {
-                    IconButton(
-                        onClick = { menuExpanded = true },
-                        modifier = Modifier.size(24.dp)
-                    ) {
-                        Icon(Icons.Default.MoreVert, contentDescription = "Options")
-                    }
-                    DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
-                        DropdownMenuItem(
-                            text = { Text("Delete") },
-                            onClick = {
-                                menuExpanded = false
-                                onDeleteRequest()
-                            },
-                            leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) }
-                        )
+                    if (moodEmoji != null) {
+                        Text(text = moodEmoji, fontSize = 14.sp)
                     }
                 }
-            }
-            if (entry.body.isNotBlank()) {
+                // Timestamp
+                val timeString = java.text.SimpleDateFormat(
+                    "hh:mm a",
+                    java.util.Locale.getDefault()
+                ).format(java.util.Date(entry.timestamp))
                 Text(
-                    text = entry.body,
+                    text = "${ entry.date }  ·  $timeString",
                     style = MaterialTheme.typography.bodySmall,
-                    maxLines = 3,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-            if (!entry.mood.isNullOrBlank()) {
-                val moodEmoji = when (entry.mood) {
-                    "RAD" -> "😁"
-                    "GOOD" -> "🙂"
-                    "MEH" -> "😐"
-                    "BAD" -> "🙁"
-                    "AWFUL" -> "😢"
-                    else -> entry.mood
-                }
-                Text(
-                    text = "Mood: $moodEmoji",
-                    style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+                // Body preview — 1 line max
+                if (entry.body.isNotBlank()) {
+                    Text(
+                        text = entry.body,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                }
+            }
+
+            // Right: overflow menu
+            Box {
+                IconButton(
+                    onClick = { menuExpanded = true },
+                    modifier = Modifier.size(32.dp)
+                ) {
+                    Icon(
+                        Icons.Default.MoreVert,
+                        contentDescription = "Options",
+                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                DropdownMenu(
+                    expanded = menuExpanded,
+                    onDismissRequest = { menuExpanded = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Delete") },
+                        onClick = {
+                            menuExpanded = false
+                            onDeleteRequest()
+                        },
+                        leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) }
+                    )
+                }
             }
         }
     }
@@ -356,18 +389,29 @@ fun JournalEditor(
     onCancel: () -> Unit
 ) {
     val context = LocalContext.current
-    var title by rememberSaveable { mutableStateOf(initialEntry?.title ?: "") }
-    var body by rememberSaveable { mutableStateOf(initialEntry?.body ?: "") }
-    var mood by rememberSaveable { mutableStateOf(initialEntry?.mood ?: "") }
+
+    // Use plain remember (not rememberSaveable) + no explicit key here because
+    // the parent key(editingEntry?.id) block already forces full recomposition
+    // when entry identity changes — preventing any state bleed between entries.
+    var title by remember { mutableStateOf(initialEntry?.title ?: "") }
+    var body by remember { mutableStateOf(initialEntry?.body ?: "") }
+    var mood by remember { mutableStateOf(initialEntry?.mood ?: "") }
     var entryDate by remember { mutableStateOf(initialEntry?.date ?: LocalDate.now()) }
 
     Scaffold(
         topBar = {
             TopAppBar(
                 navigationIcon = {
-                    IconButton(onClick = onCancel) { Icon(Icons.Default.Close, contentDescription = "Close") }
+                    IconButton(onClick = onCancel) {
+                        Icon(Icons.Default.Close, contentDescription = "Close")
+                    }
                 },
-                title = { Text(if (initialEntry != null) "Edit Entry" else "Reflect", style = MaterialTheme.typography.titleMedium) },
+                title = {
+                    Text(
+                        if (initialEntry != null) "Edit Entry" else "Reflect",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                },
                 actions = {
                     TextButton(
                         onClick = {
@@ -394,7 +438,9 @@ fun JournalEditor(
             TextField(
                 value = title,
                 onValueChange = { title = it },
-                placeholder = { Text("Title (Optional)", style = MaterialTheme.typography.titleLarge) },
+                placeholder = {
+                    Text("Title (Optional)", style = MaterialTheme.typography.titleLarge)
+                },
                 modifier = Modifier.fillMaxWidth(),
                 textStyle = MaterialTheme.typography.titleLarge,
                 colors = TextFieldDefaults.colors(
@@ -407,11 +453,13 @@ fun JournalEditor(
                 ),
                 singleLine = true
             )
-            
+
             TextField(
                 value = body,
                 onValueChange = { body = it },
-                placeholder = { Text("What's on your mind?", style = MaterialTheme.typography.bodyLarge) },
+                placeholder = {
+                    Text("What's on your mind?", style = MaterialTheme.typography.bodyLarge)
+                },
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f),
@@ -427,12 +475,17 @@ fun JournalEditor(
             )
 
             Spacer(modifier = Modifier.height(8.dp))
-            Text("Mood", style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(start = 16.dp))
-            val predefinedMoods = listOf("RAD" to "😁", "GOOD" to "🙂", "MEH" to "😐", "BAD" to "🙁", "AWFUL" to "😢")
+            Text(
+                "Mood",
+                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.padding(start = 4.dp)
+            )
+            val predefinedMoods = listOf(
+                "RAD" to "😁", "GOOD" to "🙂", "MEH" to "😐", "BAD" to "🙁", "AWFUL" to "😢"
+            )
             androidx.compose.foundation.lazy.LazyRow(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                contentPadding = PaddingValues(horizontal = 16.dp)
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 items(predefinedMoods) { (moodName, emoji) ->
                     val isSelected = mood == moodName
@@ -449,7 +502,7 @@ fun JournalEditor(
                 }
             }
 
-            Spacer(modifier = Modifier.height(16.dp))
+            Spacer(modifier = Modifier.height(8.dp))
             TextButton(
                 onClick = {
                     val current = entryDate

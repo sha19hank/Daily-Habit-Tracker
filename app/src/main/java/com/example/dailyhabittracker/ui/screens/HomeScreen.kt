@@ -58,6 +58,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.ui.graphics.luminance
 import com.example.dailyhabittracker.R
 import com.example.dailyhabittracker.ui.components.HabitCard
 import com.example.dailyhabittracker.viewmodel.HabitViewModel
@@ -155,7 +157,8 @@ fun HomeScreen(
                 )
             }
             item(key = "progress") {
-                // Cinematic Hero Card
+                val isLightMode = androidx.compose.material3.MaterialTheme.colorScheme.background.luminance() > 0.5f
+                // Cinematic Hero Card — solid surface, no alpha fog
                 androidx.compose.material3.Card(
                     modifier = Modifier.fillMaxWidth().clickable(
                         interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
@@ -164,9 +167,10 @@ fun HomeScreen(
                     ),
                     shape = androidx.compose.material3.MaterialTheme.shapes.extraLarge,
                     colors = androidx.compose.material3.CardDefaults.cardColors(
-                        containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                        containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant
                     ),
-                    elevation = androidx.compose.material3.CardDefaults.cardElevation(defaultElevation = 0.dp)
+                    elevation = androidx.compose.material3.CardDefaults.cardElevation(defaultElevation = if (isLightMode) 0.dp else 0.dp),
+                    border = if (isLightMode) androidx.compose.foundation.BorderStroke(1.dp, androidx.compose.material3.MaterialTheme.colorScheme.outline) else null
                 ) {
                     androidx.compose.foundation.layout.Row(
                         modifier = Modifier
@@ -256,6 +260,12 @@ fun HomeScreen(
                         val scale = 1f - (kotlin.math.abs(pageOffset) * 0.1f).coerceIn(0f, 0.1f)
                         val alpha = 1f - (kotlin.math.abs(pageOffset) * 0.4f).coerceIn(0f, 0.4f)
                         
+                        val isGoalLightMode = androidx.compose.material3.MaterialTheme.colorScheme.background.luminance() > 0.5f
+                        val goalCardBg = if (isGoalLightMode)
+                            com.example.dailyhabittracker.ui.theme.LightHeroCardBackground
+                        else
+                            androidx.compose.material3.MaterialTheme.colorScheme.secondaryContainer
+
                         androidx.compose.material3.Card(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -266,22 +276,33 @@ fun HomeScreen(
                                 }
                                 .clickable { navController.navigate("insights?goalId=${goal.goalId}") },
                             colors = androidx.compose.material3.CardDefaults.cardColors(
-                                containerColor = androidx.compose.material3.MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
+                                containerColor = goalCardBg
                             ),
                             shape = androidx.compose.material3.MaterialTheme.shapes.large,
-                            elevation = androidx.compose.material3.CardDefaults.cardElevation(defaultElevation = 0.dp)
+                            elevation = androidx.compose.material3.CardDefaults.cardElevation(defaultElevation = if (isGoalLightMode) 0.dp else 0.dp),
+                            border = if (isGoalLightMode) null else null
                         ) {
                             Column(modifier = Modifier.padding(20.dp)) {
+                                val isGoalLightMode2 = androidx.compose.material3.MaterialTheme.colorScheme.background.luminance() > 0.5f
+                                val onGoalCard = if (isGoalLightMode2)
+                                    com.example.dailyhabittracker.ui.theme.LightHeroCardOnSurface
+                                else
+                                    androidx.compose.material3.MaterialTheme.colorScheme.onSecondaryContainer
+                                val onGoalCardSub = if (isGoalLightMode2)
+                                    com.example.dailyhabittracker.ui.theme.LightHeroCardSubtext
+                                else
+                                    androidx.compose.material3.MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
+
                                 Text(
                                     text = if (progressDetails.overallPercent == 100) "🏆 Completed Goal" else "🎯 Active Goal",
                                     style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
-                                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
+                                    color = onGoalCardSub
                                 )
                                 Spacer(modifier = Modifier.height(6.dp))
                                 Text(
                                     text = goal.title,
                                     style = androidx.compose.material3.MaterialTheme.typography.titleLarge,
-                                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSecondaryContainer,
+                                    color = onGoalCard,
                                     maxLines = 1,
                                     overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                 )
@@ -294,12 +315,12 @@ fun HomeScreen(
                                     Text(
                                         text = "Deadline: ${goal.deadline ?: "None"}",
                                         style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
+                                        color = onGoalCardSub
                                     )
                                     Text(
                                         text = "${progressDetails.overallPercent}%",
                                         style = androidx.compose.material3.MaterialTheme.typography.labelLarge,
-                                        color = androidx.compose.material3.MaterialTheme.colorScheme.onSecondaryContainer
+                                        color = onGoalCard
                                     )
                                 }
                                 Spacer(modifier = Modifier.height(8.dp))
@@ -308,11 +329,20 @@ fun HomeScreen(
                                     animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.8f, stiffness = 100f),
                                     label = "goalProgress"
                                 )
+                                val progressTrackColor = if (isGoalLightMode2)
+                                    com.example.dailyhabittracker.ui.theme.LightHeroCardTrack
+                                else
+                                    androidx.compose.material3.MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.2f)
+                                val progressFillColor = if (isGoalLightMode2)
+                                    com.example.dailyhabittracker.ui.theme.LightHeroCardFill
+                                else
+                                    androidx.compose.material3.MaterialTheme.colorScheme.onSecondaryContainer
+
                                 androidx.compose.material3.LinearProgressIndicator(
                                     progress = { animatedGoalProgress },
                                     modifier = Modifier.fillMaxWidth().height(6.dp),
-                                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSecondaryContainer,
-                                    trackColor = androidx.compose.material3.MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.2f),
+                                    color = progressFillColor,
+                                    trackColor = progressTrackColor,
                                     strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
                                 )
                             }
@@ -321,9 +351,11 @@ fun HomeScreen(
                 }
             } else {
                 item(key = "activeGoalEmpty") {
+                    val isLightModeEmpty = androidx.compose.material3.MaterialTheme.colorScheme.background.luminance() > 0.5f
                     Surface(
-                        color = androidx.compose.material3.MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f),
+                        color = androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant,
                         shape = androidx.compose.material3.MaterialTheme.shapes.medium,
+                        border = if (isLightModeEmpty) androidx.compose.foundation.BorderStroke(1.dp, androidx.compose.material3.MaterialTheme.colorScheme.outline) else null,
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Column(

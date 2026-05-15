@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.time.LocalTime
@@ -38,6 +39,10 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
     private val reminderScheduler: ReminderWorkScheduler = container.reminderScheduler
     private val goalDeadlineScheduler: GoalDeadlineScheduler = container.goalDeadlineScheduler
     private val stepTracker: StepTracker = container.stepTracker
+
+    // Read the persisted dark mode value synchronously at init time so the
+    // very first composition uses the correct theme — prevents Light-theme flash on launch.
+    private val initialDarkMode: Boolean = runBlocking { settings.darkModeEnabled().first() }
 
     private val habitsFlow = repository.getHabits()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -126,7 +131,7 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
 
 
     val darkModeEnabled: StateFlow<Boolean> = settings.darkModeEnabled()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), initialDarkMode)
 
     val soundsEnabled: StateFlow<Boolean> = settings.soundsEnabled()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
