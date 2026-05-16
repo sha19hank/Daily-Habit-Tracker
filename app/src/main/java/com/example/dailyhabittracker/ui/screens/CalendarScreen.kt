@@ -40,6 +40,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -70,8 +71,10 @@ fun CalendarScreen(navController: NavController, viewModel: HabitViewModel) {
     val completedIds by viewModel.selectedDayCompletedHabitIds.collectAsState()
     val journalEntries by viewModel.selectedDayJournalEntries.collectAsState()
 
+    // YearMonth is not Serializable — use plain remember (resets to current month on recreation, clean UX)
     var displayedMonth by remember { mutableStateOf(YearMonth.now()) }
-    var selectedDate by remember { mutableStateOf<LocalDate?>(null) }
+    // LocalDate IS Serializable — rememberSaveable preserves selection across config changes
+    var selectedDate by rememberSaveable { mutableStateOf<LocalDate?>(null) }
     var isSheetOpen by remember { mutableStateOf(false) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
 
@@ -98,6 +101,8 @@ fun CalendarScreen(navController: NavController, viewModel: HabitViewModel) {
                 .fillMaxSize()
                 .padding(padding)
                 .padding(horizontal = 24.dp)
+                // 104dp bottom: dock(68) + dock-margin(20) + breathing(16)
+                .padding(bottom = 104.dp)
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
@@ -141,7 +146,7 @@ fun CalendarScreen(navController: NavController, viewModel: HabitViewModel) {
 
                     Crossfade(
                         targetState = displayedMonth,
-                        animationSpec = tween(durationMillis = 300),
+                        animationSpec = tween(durationMillis = 220),
                         label = "monthFade"
                     ) { targetMonth ->
                         CalendarMonthGrid(
@@ -206,7 +211,13 @@ fun StatCard(title: String, value: String, modifier: Modifier = Modifier, highli
     Surface(
         modifier = modifier,
         shape = MaterialTheme.shapes.medium,
-        color = if (highlight) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        // Explicit static token — no surfaceVariant alpha copy (OEM tonal bleed risk)
+        color = if (highlight)
+            MaterialTheme.colorScheme.primaryContainer
+        else if (MaterialTheme.colorScheme.background.luminance() > 0.5f)
+            com.example.dailyhabittracker.ui.theme.LightSurfaceVariant
+        else
+            com.example.dailyhabittracker.ui.theme.DarkSurface
     ) {
         Column(
             modifier = Modifier.padding(12.dp),
@@ -298,7 +309,11 @@ private fun CalendarHeatmapCell(
     val rate = if (scheduled == 0) 0f else completed.toFloat() / scheduled.toFloat()
 
     val backgroundColor = when {
-        rate == 0f -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.1f)
+        // Static token for empty cells — no surfaceVariant alpha derivation
+        rate == 0f -> if (MaterialTheme.colorScheme.background.luminance() > 0.5f)
+            com.example.dailyhabittracker.ui.theme.LightOutlineVariant.copy(alpha = 0.35f)
+        else
+            com.example.dailyhabittracker.ui.theme.DarkSurfaceVariant.copy(alpha = 0.4f)
         rate <= 0.25f -> MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
         rate <= 0.50f -> MaterialTheme.colorScheme.primary.copy(alpha = 0.35f)
         rate <= 0.75f -> MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)
@@ -368,7 +383,12 @@ fun DayDetailSheet(
                 style = MaterialTheme.typography.titleLarge
             )
             Surface(
-                color = if (rate == 100 && total > 0) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceVariant,
+                color = if (rate == 100 && total > 0)
+                    MaterialTheme.colorScheme.primaryContainer
+                else if (MaterialTheme.colorScheme.background.luminance() > 0.5f)
+                    com.example.dailyhabittracker.ui.theme.LightSurfaceVariant
+                else
+                    com.example.dailyhabittracker.ui.theme.DarkSurfaceVariant,
                 shape = MaterialTheme.shapes.small
             ) {
                 Text(
@@ -383,8 +403,12 @@ fun DayDetailSheet(
         if (journalEntries.isNotEmpty()) {
             Text("Reflections", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
             journalEntries.forEach { entry ->
+                // Explicit static token — surfaceVariant.copy(alpha=0.5f) is a banned pattern
                 Surface(
-                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                    color = if (MaterialTheme.colorScheme.background.luminance() > 0.5f)
+                        com.example.dailyhabittracker.ui.theme.LightSurfaceVariant
+                    else
+                        com.example.dailyhabittracker.ui.theme.DarkSurface,
                     shape = MaterialTheme.shapes.medium,
                     modifier = Modifier.fillMaxWidth()
                 ) {

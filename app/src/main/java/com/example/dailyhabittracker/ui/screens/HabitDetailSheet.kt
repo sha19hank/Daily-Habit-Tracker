@@ -18,8 +18,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.unit.dp
 import com.example.dailyhabittracker.data.HabitEntity
+import com.example.dailyhabittracker.ui.theme.DarkSurface
+import com.example.dailyhabittracker.ui.theme.LightSurfaceVariant
 import com.example.dailyhabittracker.viewmodel.HabitHistory
 import java.time.format.DateTimeFormatter
 
@@ -37,6 +40,10 @@ fun HabitDetailSheet(
     onEnableReminder: () -> Unit,
     onDisableReminder: () -> Unit
 ) {
+    // Computed once per composition — deterministic, no Material fallback
+    val isLight = MaterialTheme.colorScheme.background.luminance() > 0.5f
+    val panelColor = if (isLight) LightSurfaceVariant else DarkSurface
+
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(
             modifier = Modifier
@@ -46,7 +53,8 @@ fun HabitDetailSheet(
         ) {
             Text(text = habit.name, style = MaterialTheme.typography.titleLarge)
 
-            Surface(tonalElevation = 1.dp, shape = MaterialTheme.shapes.medium) {
+            // All detail panel surfaces use explicit static token — no tonalElevation bleed
+            Surface(color = panelColor, shape = MaterialTheme.shapes.medium) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(text = "Current streak: ${habit.currentStreak}", color = MaterialTheme.colorScheme.secondary)
                     Text(text = "Longest streak: ${habit.longestStreak}")
@@ -58,7 +66,7 @@ fun HabitDetailSheet(
                 }
             }
 
-            Surface(tonalElevation = 1.dp, shape = MaterialTheme.shapes.medium) {
+            Surface(color = panelColor, shape = MaterialTheme.shapes.medium) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(text = "Completion history", style = MaterialTheme.typography.titleMedium)
                     Text(text = "This week: ${history?.weekCount ?: 0} completions")
@@ -67,7 +75,7 @@ fun HabitDetailSheet(
             }
 
             if (habit.stepEnabled && habit.stepGoal != null) {
-                Surface(tonalElevation = 1.dp, shape = MaterialTheme.shapes.medium) {
+                Surface(color = panelColor, shape = MaterialTheme.shapes.medium) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                         Text(text = "Step progress", style = MaterialTheme.typography.titleMedium)
                         if (!stepSupported) {
@@ -83,7 +91,7 @@ fun HabitDetailSheet(
                 }
             }
 
-            Surface(tonalElevation = 1.dp, shape = MaterialTheme.shapes.medium) {
+            Surface(color = panelColor, shape = MaterialTheme.shapes.medium) {
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -96,7 +104,7 @@ fun HabitDetailSheet(
                 }
             }
 
-            Surface(tonalElevation = 1.dp, shape = MaterialTheme.shapes.medium) {
+            Surface(color = panelColor, shape = MaterialTheme.shapes.medium) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text(text = "Streak recovery", style = MaterialTheme.typography.titleMedium)
                     Text(
@@ -110,7 +118,7 @@ fun HabitDetailSheet(
                 }
             }
 
-            Surface(tonalElevation = 1.dp, shape = MaterialTheme.shapes.medium) {
+            Surface(color = panelColor, shape = MaterialTheme.shapes.medium) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(text = "Reminder", style = MaterialTheme.typography.titleMedium)
                     Text(
@@ -130,7 +138,7 @@ fun HabitDetailSheet(
                 }
             }
 
-            Surface(tonalElevation = 1.dp, shape = MaterialTheme.shapes.medium) {
+            Surface(color = panelColor, shape = MaterialTheme.shapes.medium) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text(text = "Reflection", style = MaterialTheme.typography.titleMedium)
                     Text(

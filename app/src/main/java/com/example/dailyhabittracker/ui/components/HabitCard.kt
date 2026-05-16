@@ -4,7 +4,7 @@ import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.animateContentSize
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
+import com.example.dailyhabittracker.ui.theme.AppMotion
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Box
@@ -92,7 +92,7 @@ fun HabitCard(
             habit.color != 0 -> baseTint.copy(alpha = 0.08f)
             else -> MaterialTheme.colorScheme.surface
         },
-        animationSpec = tween(durationMillis = 200),
+        animationSpec = AppMotion.colorTween(),
         label = "cardColor"
     )
     val interactionSource = remember { MutableInteractionSource() }
@@ -103,19 +103,20 @@ fun HabitCard(
             isCompletedToday -> if (isLightMode) 3.dp else 6.dp
             else -> if (isLightMode) 1.dp else 2.dp
         },
-        animationSpec = tween(durationMillis = 180),
+        animationSpec = AppMotion.dpTween(),
         label = "cardElevation"
     )
+    // 0.985f: restrained editorial press — tactile but not rubbery
     val scale by animateFloatAsState(
-        targetValue = when {
-            pressed -> 0.96f
-            else -> 1f
-        },
-        animationSpec = androidx.compose.animation.core.spring(
-            dampingRatio = 0.6f, 
-            stiffness = 300f
-        ),
+        targetValue = if (pressed) 0.985f else 1f,
+        animationSpec = AppMotion.pressBounce(),
         label = "cardScale"
+    )
+    // Checkbox completion pop — tiny, fast, felt more than seen
+    val checkboxScale by animateFloatAsState(
+        targetValue = if (isCompletedToday) 1.08f else 1f,
+        animationSpec = AppMotion.checkboxPop(),
+        label = "checkboxScale"
     )
 
     Card(
@@ -133,7 +134,7 @@ fun HabitCard(
                     ambientColor = Color(0xFF2A140A).copy(alpha = 0.08f)
                 ) else Modifier
             )
-            .animateContentSize(animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.8f, stiffness = 200f))
+            .animateContentSize(animationSpec = AppMotion.contentSpring())
             .clickable(
                 interactionSource = interactionSource,
                 indication = androidx.compose.material.ripple.rememberRipple(),
@@ -146,13 +147,16 @@ fun HabitCard(
     ) {
         Box {
             if (habit.color != 0) {
+                // Fixed height accent bar — fillMaxHeight causes layout thrash on expand
                 Box(
                     modifier = Modifier
-                        .fillMaxHeight()
                         .width(3.dp)
+                        .height(44.dp)
                         .align(Alignment.CenterStart)
-                        .padding(vertical = 12.dp)
-                        .background(Color(habit.color))
+                        .background(
+                            Color(habit.color),
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(topEnd = 3.dp, bottomEnd = 3.dp)
+                        )
                 )
             }
             Column(modifier = Modifier.padding(20.dp)) {
@@ -190,20 +194,19 @@ fun HabitCard(
                     }
                     
                     Box(
-                        modifier = Modifier
-                            .graphicsLayer {
-                                scaleX = if (pressed) 0.9f else 1f
-                                scaleY = if (pressed) 0.9f else 1f
-                            }
+                        modifier = Modifier.graphicsLayer {
+                            scaleX = checkboxScale
+                            scaleY = checkboxScale
+                        }
                     ) {
                         Checkbox(
-                        checked = isCompletedToday,
-                        enabled = !isPaused && isScheduledToday,
-                        onCheckedChange = { onToggleCompletion() },
-                        modifier = Modifier.semantics {
-                            contentDescription = if (isCompletedToday) "Completed" else "Mark complete"
-                        }
-                    )
+                            checked = isCompletedToday,
+                            enabled = !isPaused && isScheduledToday,
+                            onCheckedChange = { onToggleCompletion() },
+                            modifier = Modifier.semantics {
+                                contentDescription = if (isCompletedToday) "Completed" else "Mark complete"
+                            }
+                        )
                     }
                 }
 
@@ -261,7 +264,7 @@ fun HabitCard(
                         } else {
                             val progress by animateFloatAsState(
                                 targetValue = (stepsToday.toFloat() / habit.stepGoal).coerceIn(0f, 1f),
-                                animationSpec = tween(durationMillis = 180),
+                                animationSpec = AppMotion.floatTween(AppMotion.durationShort),
                                 label = "stepProgress"
                             )
                             Text(

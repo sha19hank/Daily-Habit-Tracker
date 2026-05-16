@@ -121,10 +121,16 @@ fun StatsScreen(
                 .fillMaxSize()
                 .padding(padding)
                 .verticalScroll(scrollState)
-                .padding(24.dp),
+                .padding(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 104.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            Surface(tonalElevation = 1.dp, shape = MaterialTheme.shapes.medium) {
+            val isLightStats = MaterialTheme.colorScheme.background.luminance() > 0.5f
+            // Explicit static token — tonalElevation alone triggers Material You tint on OEMs
+            Surface(
+                color = if (isLightStats) com.example.dailyhabittracker.ui.theme.LightSurfaceVariant
+                        else com.example.dailyhabittracker.ui.theme.DarkSurface,
+                shape = MaterialTheme.shapes.medium
+            ) {
                 Column(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -134,7 +140,7 @@ fun StatsScreen(
                     Text(text = "Goals", style = MaterialTheme.typography.titleMedium)
                     if (goals.isEmpty()) {
                         Text(
-                            text = "No goals yet.",
+                            text = "Patterns appear with time.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -153,8 +159,15 @@ fun StatsScreen(
                     } else {
                         goals.forEach { goal ->
                             val isHighlighted = highlightGoalId == goal.goalId
+                            val isLightStats2 = MaterialTheme.colorScheme.background.luminance() > 0.5f
                             Surface(
-                                tonalElevation = if (isHighlighted) 8.dp else 2.dp,
+                                // Highlighted: primaryContainer; normal: static surface token
+                                color = if (isHighlighted)
+                                    MaterialTheme.colorScheme.primaryContainer
+                                else if (isLightStats2)
+                                    com.example.dailyhabittracker.ui.theme.LightSurface
+                                else
+                                    com.example.dailyhabittracker.ui.theme.DarkSurface,
                                 shape = MaterialTheme.shapes.small,
                                 border = if (isHighlighted) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null,
                                 modifier = Modifier
@@ -257,8 +270,12 @@ fun StatsScreen(
                                         }
                                     } else {
                                         val isLightStatsMode = MaterialTheme.colorScheme.background.luminance() > 0.5f
+                                        // Explicit static tokens — removes banned secondaryContainer + alpha bleed
                                         Surface(
-                                            color = if (isLightStatsMode) MaterialTheme.colorScheme.surfaceVariant else MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.4f),
+                                            color = if (isLightStatsMode)
+                                                com.example.dailyhabittracker.ui.theme.LightSurfaceVariant
+                                            else
+                                                com.example.dailyhabittracker.ui.theme.DarkSurfaceVariant,
                                             shape = MaterialTheme.shapes.small,
                                             border = if (isLightStatsMode) BorderStroke(1.dp, MaterialTheme.colorScheme.outline) else null,
                                             modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
@@ -282,14 +299,17 @@ fun StatsScreen(
 
             if (weeklySummary.isEmpty() && monthlyCount == 0) {
                 Text(
-                    text = "Small habits compound.",
+                    text = "Patterns emerge with consistency.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             } else {
+                val isLightStats = MaterialTheme.colorScheme.background.luminance() > 0.5f
                 Text(text = "Weekly Summary", style = MaterialTheme.typography.titleLarge)
+                // Explicit containerColor — tonalElevation alone can bleed Material You tint on OEMs
                 Surface(
-                    tonalElevation = 1.dp,
+                    color = if (isLightStats) com.example.dailyhabittracker.ui.theme.LightSurfaceVariant
+                            else com.example.dailyhabittracker.ui.theme.DarkSurface,
                     shape = MaterialTheme.shapes.medium
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
@@ -299,7 +319,8 @@ fun StatsScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
                 Surface(
-                    tonalElevation = 1.dp,
+                    color = if (isLightStats) com.example.dailyhabittracker.ui.theme.LightSurfaceVariant
+                            else com.example.dailyhabittracker.ui.theme.DarkSurface,
                     shape = MaterialTheme.shapes.medium
                 ) {
                     Row(
@@ -315,7 +336,11 @@ fun StatsScreen(
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
-                Surface(tonalElevation = 1.dp, shape = MaterialTheme.shapes.medium) {
+                Surface(
+                    color = if (isLightStats) com.example.dailyhabittracker.ui.theme.LightSurfaceVariant
+                            else com.example.dailyhabittracker.ui.theme.DarkSurface,
+                    shape = MaterialTheme.shapes.medium
+                ) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -339,7 +364,13 @@ fun StatsScreen(
             }
 
             if (!focusMode && insights.isNotEmpty()) {
-                Surface(tonalElevation = 1.dp, shape = MaterialTheme.shapes.medium) {
+                Surface(
+                    color = if (MaterialTheme.colorScheme.background.luminance() > 0.5f)
+                        com.example.dailyhabittracker.ui.theme.LightSurfaceVariant
+                    else
+                        com.example.dailyhabittracker.ui.theme.DarkSurface,
+                    shape = MaterialTheme.shapes.medium
+                ) {
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -407,8 +438,15 @@ fun StatsScreen(
             title = { Text(if (editingGoalId == null) "New goal" else "Edit goal") },
             text = {
                 val isLightMode = MaterialTheme.colorScheme.background.luminance() > 0.5f
-                val fieldFillColor = if (isLightMode) Color(0xFFFBF8F4) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-                val fieldFocusedFillColor = if (isLightMode) Color(0xFFFBF8F4) else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                // Static opaque tokens — surfaceVariant.copy(alpha) is a documented OEM regression trigger
+                val fieldFillColor = if (isLightMode)
+                    Color(0xFFFBF8F4)
+                else
+                    com.example.dailyhabittracker.ui.theme.DarkSurfaceVariant
+                val fieldFocusedFillColor = if (isLightMode)
+                    Color(0xFFFBF8F4)
+                else
+                    com.example.dailyhabittracker.ui.theme.DarkSurface
                 val fieldShape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp)
 
                 val textFieldColors = OutlinedTextFieldDefaults.colors(

@@ -34,6 +34,8 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInVertically
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.luminance
@@ -58,8 +60,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.core.Spring
+import com.example.dailyhabittracker.ui.theme.AppMotion
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.ui.graphics.graphicsLayer
@@ -131,13 +132,13 @@ fun JournalScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "No reflections yet.",
+                    text = "Nothing captured yet.",
                     style = MaterialTheme.typography.titleMedium,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(
-                    text = "Capture a calm thought or a moment from your day.",
+                    text = "Tap + to write your first reflection.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
@@ -155,7 +156,8 @@ fun JournalScreen(
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(padding),
-                contentPadding = PaddingValues(horizontal = 24.dp, vertical = 16.dp),
+                // 104dp bottom padding: dock(68) + dock-bottom-margin(20) + breathing room(16)
+                contentPadding = PaddingValues(start = 24.dp, top = 16.dp, end = 24.dp, bottom = 104.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 val keys = listOf("Today", "Yesterday", "Older").filter { groupedEntries.containsKey(it) }
@@ -185,16 +187,17 @@ fun JournalScreen(
     }
 
     // Editor — keyed on the editing entry's ID so state is fully reset per entry
+    // Transition: fade + slide together for a layered-paper feel
     AnimatedVisibility(
         visible = isSheetOpen,
         enter = slideInVertically(
             initialOffsetY = { it },
-            animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.8f, stiffness = 200f)
-        ),
+            animationSpec = AppMotion.panelSlideSpring()
+        ) + fadeIn(animationSpec = AppMotion.floatTween(AppMotion.durationLong)),
         exit = slideOutVertically(
             targetOffsetY = { it },
-            animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.8f, stiffness = 200f)
-        )
+            animationSpec = AppMotion.panelSlideSpring()
+        ) + fadeOut(animationSpec = AppMotion.floatTween(AppMotion.exitDuration))
     ) {
         Surface(
             modifier = Modifier.fillMaxSize(),
@@ -260,8 +263,8 @@ fun JournalCard(
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
-        targetValue = if (pressed) 0.97f else 1f,
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessMedium),
+        targetValue = if (pressed) 0.985f else 1f,
+        animationSpec = AppMotion.pressBounce(),
         label = "scale_${entry.id}"
     )
     val isLightMode = MaterialTheme.colorScheme.background.luminance() > 0.5f
@@ -398,6 +401,12 @@ fun JournalEditor(
     var mood by remember { mutableStateOf(initialEntry?.mood ?: "") }
     var entryDate by remember { mutableStateOf(initialEntry?.date ?: LocalDate.now()) }
 
+    // Static opaque token for focused container — no alpha copy of Material-derived surfaceVariant
+    val editorFocusedBg = if (MaterialTheme.colorScheme.background.luminance() > 0.5f)
+        com.example.dailyhabittracker.ui.theme.LightSurfaceVariant
+    else
+        com.example.dailyhabittracker.ui.theme.DarkSurfaceVariant
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -444,7 +453,7 @@ fun JournalEditor(
                 modifier = Modifier.fillMaxWidth(),
                 textStyle = MaterialTheme.typography.titleLarge,
                 colors = TextFieldDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
+                    focusedContainerColor = editorFocusedBg,
                     unfocusedContainerColor = Color.Transparent,
                     disabledContainerColor = Color.Transparent,
                     focusedIndicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
@@ -465,7 +474,7 @@ fun JournalEditor(
                     .weight(1f),
                 textStyle = MaterialTheme.typography.bodyLarge,
                 colors = TextFieldDefaults.colors(
-                    focusedContainerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
+                    focusedContainerColor = editorFocusedBg,
                     unfocusedContainerColor = Color.Transparent,
                     disabledContainerColor = Color.Transparent,
                     focusedIndicatorColor = Color.Transparent,

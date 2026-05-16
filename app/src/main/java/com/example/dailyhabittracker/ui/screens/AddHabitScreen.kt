@@ -83,8 +83,15 @@ fun AddHabitScreen(
     val context = LocalContext.current
 
     val isLightMode = androidx.compose.material3.MaterialTheme.colorScheme.background.luminance() > 0.5f
-    val fieldFillColor = if (isLightMode) androidx.compose.ui.graphics.Color(0xFFFBF8F4) else androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-    val fieldFocusedFillColor = if (isLightMode) androidx.compose.ui.graphics.Color(0xFFFBF8F4) else androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+    // Static opaque tokens — surfaceVariant.copy(alpha) causes OEM color drift under long sessions
+    val fieldFillColor = if (isLightMode)
+        androidx.compose.ui.graphics.Color(0xFFFBF8F4)
+    else
+        com.example.dailyhabittracker.ui.theme.DarkSurfaceVariant
+    val fieldFocusedFillColor = if (isLightMode)
+        androidx.compose.ui.graphics.Color(0xFFFBF8F4)
+    else
+        com.example.dailyhabittracker.ui.theme.DarkSurface
     val fieldShape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp)
 
     val textFieldColors = OutlinedTextFieldDefaults.colors(

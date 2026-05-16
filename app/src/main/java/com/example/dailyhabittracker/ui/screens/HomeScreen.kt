@@ -71,7 +71,8 @@ import java.time.LocalTime
 @OptIn(ExperimentalMaterial3Api::class)
 fun HomeScreen(
     navController: NavController,
-    viewModel: HabitViewModel
+    viewModel: HabitViewModel,
+    onScrollStateChange: (isScrollingDown: Boolean) -> Unit = {}
 ) {
     val habits by viewModel.habits.collectAsState()
     val tokenCount by viewModel.tokenCount.collectAsState()
@@ -117,6 +118,17 @@ fun HomeScreen(
         }
     }
 
+    // FAB scroll awareness: threshold=2 items to avoid flickering on tiny scroll
+    val isScrollingDown by remember {
+        derivedStateOf { listState.firstVisibleItemIndex >= 2 }
+    }
+    LaunchedEffect(isScrollingDown) {
+        onScrollStateChange(isScrollingDown)
+    }
+
+    // Hoisted ABOVE LazyColumn — pagerState inside a lazy item is unstable across recompositions
+    val goalPagerState = rememberPagerState(pageCount = { carouselGoals.size })
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -146,19 +158,12 @@ fun HomeScreen(
                 .fillMaxSize()
                 .padding(padding),
             state = listState,
-            contentPadding = PaddingValues(horizontal = 24.dp, vertical = 24.dp),
+            contentPadding = PaddingValues(start = 24.dp, top = 24.dp, end = 24.dp, bottom = 104.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            item(key = "loaded") {
-                Text(
-                    text = "App Loaded",
-                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
-                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
             item(key = "progress") {
                 val isLightMode = androidx.compose.material3.MaterialTheme.colorScheme.background.luminance() > 0.5f
-                // Cinematic Hero Card — solid surface, no alpha fog
+                // Progress card — explicit static container, NOT surfaceVariant (prevents OEM tonal bleed)
                 androidx.compose.material3.Card(
                     modifier = Modifier.fillMaxWidth().clickable(
                         interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
@@ -167,9 +172,12 @@ fun HomeScreen(
                     ),
                     shape = androidx.compose.material3.MaterialTheme.shapes.extraLarge,
                     colors = androidx.compose.material3.CardDefaults.cardColors(
-                        containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant
+                        containerColor = if (isLightMode)
+                            com.example.dailyhabittracker.ui.theme.LightSurfaceVariant
+                        else
+                            com.example.dailyhabittracker.ui.theme.DarkSurface
                     ),
-                    elevation = androidx.compose.material3.CardDefaults.cardElevation(defaultElevation = if (isLightMode) 0.dp else 0.dp),
+                    elevation = androidx.compose.material3.CardDefaults.cardElevation(defaultElevation = 0.dp),
                     border = if (isLightMode) androidx.compose.foundation.BorderStroke(1.dp, androidx.compose.material3.MaterialTheme.colorScheme.outline) else null
                 ) {
                     androidx.compose.foundation.layout.Row(
@@ -198,12 +206,10 @@ fun HomeScreen(
                         Box(contentAlignment = Alignment.Center) {
                             val progress = if (scheduledTodayCount == 0) 0f
                             else completedTodayCount.toFloat() / scheduledTodayCount.toFloat()
+                            // AppMotion spec — no inline spring object creation on each recomposition
                             val animatedProgress by androidx.compose.animation.core.animateFloatAsState(
                                 targetValue = progress,
-                                animationSpec = androidx.compose.animation.core.spring(
-                                    dampingRatio = androidx.compose.animation.core.Spring.DampingRatioNoBouncy,
-                                    stiffness = androidx.compose.animation.core.Spring.StiffnessLow
-                                ),
+                                animationSpec = com.example.dailyhabittracker.ui.theme.AppMotion.floatTween(com.example.dailyhabittracker.ui.theme.AppMotion.durationMedium),
                                 label = "progress"
                             )
                             
@@ -217,10 +223,14 @@ fun HomeScreen(
                                     )
                             )
                             
+                            // Track ring: explicit static color, NOT surfaceVariant
                             CircularProgressIndicator(
                                 progress = { 1f },
                                 modifier = Modifier.size(80.dp),
-                                color = androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant,
+                                color = if (isLightMode)
+                                    com.example.dailyhabittracker.ui.theme.LightOutlineVariant
+                                else
+                                    com.example.dailyhabittracker.ui.theme.DarkSurfaceVariant,
                                 strokeWidth = 8.dp,
                                 strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
                             )
@@ -245,9 +255,9 @@ fun HomeScreen(
 
             if (carouselGoals.isNotEmpty()) {
                 item(key = "activeGoalPager") {
-                    val pagerState = rememberPagerState(pageCount = { carouselGoals.size })
+                    // goalPagerState is hoisted ABOVE the LazyColumn — stable across recompositions
                     HorizontalPager(
-                        state = pagerState,
+                        state = goalPagerState,
                         contentPadding = PaddingValues(horizontal = 32.dp),
                         pageSpacing = 16.dp,
                         modifier = Modifier.fillMaxWidth()
@@ -255,16 +265,17 @@ fun HomeScreen(
                         val goal = carouselGoals[page]
                         val progressDetails = goalProgress[goal.goalId] ?: com.example.dailyhabittracker.data.GoalProgressDetails(0, emptyList())
                         
-                        // Calculate parallax scale
-                        val pageOffset = (pagerState.currentPage - page) + pagerState.currentPageOffsetFraction
+                        // Parallax offset from hoisted goalPagerState
+                        val pageOffset = (goalPagerState.currentPage - page) + goalPagerState.currentPageOffsetFraction
                         val scale = 1f - (kotlin.math.abs(pageOffset) * 0.1f).coerceIn(0f, 0.1f)
                         val alpha = 1f - (kotlin.math.abs(pageOffset) * 0.4f).coerceIn(0f, 0.4f)
-                        
+
                         val isGoalLightMode = androidx.compose.material3.MaterialTheme.colorScheme.background.luminance() > 0.5f
+                        // Dark: DarkSurfaceVariant replaces banned secondaryContainer
                         val goalCardBg = if (isGoalLightMode)
                             com.example.dailyhabittracker.ui.theme.LightHeroCardBackground
                         else
-                            androidx.compose.material3.MaterialTheme.colorScheme.secondaryContainer
+                            com.example.dailyhabittracker.ui.theme.DarkSurfaceVariant
 
                         androidx.compose.material3.Card(
                             modifier = Modifier
@@ -284,14 +295,15 @@ fun HomeScreen(
                         ) {
                             Column(modifier = Modifier.padding(20.dp)) {
                                 val isGoalLightMode2 = androidx.compose.material3.MaterialTheme.colorScheme.background.luminance() > 0.5f
+                                // Dark text: DarkOnBackground replaces banned onSecondaryContainer
                                 val onGoalCard = if (isGoalLightMode2)
                                     com.example.dailyhabittracker.ui.theme.LightHeroCardOnSurface
                                 else
-                                    androidx.compose.material3.MaterialTheme.colorScheme.onSecondaryContainer
+                                    com.example.dailyhabittracker.ui.theme.DarkOnBackground
                                 val onGoalCardSub = if (isGoalLightMode2)
                                     com.example.dailyhabittracker.ui.theme.LightHeroCardSubtext
                                 else
-                                    androidx.compose.material3.MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.8f)
+                                    com.example.dailyhabittracker.ui.theme.DarkOnSurfaceVariant
 
                                 Text(
                                     text = if (progressDetails.overallPercent == 100) "🏆 Completed Goal" else "🎯 Active Goal",
@@ -324,19 +336,21 @@ fun HomeScreen(
                                     )
                                 }
                                 Spacer(modifier = Modifier.height(8.dp))
+                                // AppMotion spec — no inline spring on every recomposition
                                 val animatedGoalProgress by androidx.compose.animation.core.animateFloatAsState(
                                     targetValue = progressDetails.overallPercent / 100f,
-                                    animationSpec = androidx.compose.animation.core.spring(dampingRatio = 0.8f, stiffness = 100f),
+                                    animationSpec = com.example.dailyhabittracker.ui.theme.AppMotion.floatTween(com.example.dailyhabittracker.ui.theme.AppMotion.durationMedium),
                                     label = "goalProgress"
                                 )
+                                // Progress track: explicit static tokens, no Material-derived alpha copies
                                 val progressTrackColor = if (isGoalLightMode2)
                                     com.example.dailyhabittracker.ui.theme.LightHeroCardTrack
                                 else
-                                    androidx.compose.material3.MaterialTheme.colorScheme.onSecondaryContainer.copy(alpha = 0.2f)
+                                    com.example.dailyhabittracker.ui.theme.DarkOutline
                                 val progressFillColor = if (isGoalLightMode2)
                                     com.example.dailyhabittracker.ui.theme.LightHeroCardFill
                                 else
-                                    androidx.compose.material3.MaterialTheme.colorScheme.onSecondaryContainer
+                                    com.example.dailyhabittracker.ui.theme.DarkOnBackground
 
                                 androidx.compose.material3.LinearProgressIndicator(
                                     progress = { animatedGoalProgress },
@@ -353,7 +367,11 @@ fun HomeScreen(
                 item(key = "activeGoalEmpty") {
                     val isLightModeEmpty = androidx.compose.material3.MaterialTheme.colorScheme.background.luminance() > 0.5f
                     Surface(
-                        color = androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant,
+                        // Explicit static tokens — no Material-derived surfaceVariant fallback
+                        color = if (isLightModeEmpty)
+                            com.example.dailyhabittracker.ui.theme.LightSurfaceVariant
+                        else
+                            com.example.dailyhabittracker.ui.theme.DarkSurface,
                         shape = androidx.compose.material3.MaterialTheme.shapes.medium,
                         border = if (isLightModeEmpty) androidx.compose.foundation.BorderStroke(1.dp, androidx.compose.material3.MaterialTheme.colorScheme.outline) else null,
                         modifier = Modifier.fillMaxWidth()
@@ -366,7 +384,7 @@ fun HomeScreen(
                             Text(
                                 text = "No active goals yet",
                                 style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
-                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSecondaryContainer
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurface
                             )
                             Button(onClick = { navController.navigate("insights") }) {
                                 Text("Create Goal")
@@ -419,11 +437,23 @@ fun HomeScreen(
 
             if (displayHabits.isEmpty()) {
                 item(key = "empty") {
-                    Surface(tonalElevation = 0.dp) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(vertical = 24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
                         Text(
-                            text = "Consistency begins with one small action.",
+                            text = "Nothing tracked yet.",
+                            style = androidx.compose.material3.MaterialTheme.typography.titleSmall,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurface
+                        )
+                        Text(
+                            text = "Add your first habit to begin.",
                             style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center
                         )
                     }
                 }
@@ -496,7 +526,15 @@ fun HomeScreen(
                 }
 
                 item(key = "quickJournal") {
-                    Surface(tonalElevation = 1.dp, shape = androidx.compose.material3.MaterialTheme.shapes.medium) {
+                    val isLightQuick = androidx.compose.material3.MaterialTheme.colorScheme.background.luminance() > 0.5f
+                    Surface(
+                        // Explicit static token — prevents tonalElevation OEM tint bleed
+                        color = if (isLightQuick)
+                            com.example.dailyhabittracker.ui.theme.LightSurfaceVariant
+                        else
+                            com.example.dailyhabittracker.ui.theme.DarkSurface,
+                        shape = androidx.compose.material3.MaterialTheme.shapes.medium
+                    ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()

@@ -7,6 +7,7 @@ import androidx.activity.viewModels
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -22,6 +23,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
@@ -53,8 +55,10 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.Icon
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.navigation.NavDestination.Companion.hierarchy
+import com.example.dailyhabittracker.ui.theme.AppMotion
 
 class MainActivity : ComponentActivity() {
     private val viewModel: HabitViewModel by viewModels()
@@ -87,6 +91,14 @@ private fun AppNavHost(viewModel: HabitViewModel) {
     val goalDialogRequest = rememberSaveable { mutableStateOf(false) }
     val fabInteractionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     val isFabPressed by fabInteractionSource.collectIsPressedAsState()
+    // FAB scroll-awareness: hoisted state written by HomeScreen callback
+    var isFabScrolledDown by remember { mutableStateOf(false) }
+    val fabAlpha by animateFloatAsState(
+        // Fades to 0.38f (not invisible) — quiet, not aggressive
+        targetValue = if (isFabScrolledDown && currentRoute == "today") 0.38f else 1f,
+        animationSpec = AppMotion.floatTween(AppMotion.durationMedium),
+        label = "fabAlpha"
+    )
 
     // Root overlay Box — dock and FAB float ABOVE content, Scaffold reserves NO space for them
     Box(modifier = Modifier.fillMaxSize()) {
@@ -100,7 +112,8 @@ private fun AppNavHost(viewModel: HabitViewModel) {
                         colors = if (darkMode) {
                             listOf(
                                 androidx.compose.material3.MaterialTheme.colorScheme.background,
-                                androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f),
+                                // Explicit static token — no surfaceVariant alpha derivation
+                                com.example.dailyhabittracker.ui.theme.DarkSurfaceVariant,
                                 androidx.compose.material3.MaterialTheme.colorScheme.background
                             )
                         } else {
@@ -124,21 +137,39 @@ private fun AppNavHost(viewModel: HabitViewModel) {
                 // Only top padding from Scaffold (status bar insets) — no bottom padding
                 modifier = Modifier.padding(top = padding.calculateTopPadding()),
                 enterTransition = {
-                    androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(300)) +
-                    androidx.compose.animation.scaleIn(initialScale = 0.98f, animationSpec = androidx.compose.animation.core.tween(300))
+                    androidx.compose.animation.fadeIn(
+                        animationSpec = androidx.compose.animation.core.tween(AppMotion.durationLong)
+                    ) + androidx.compose.animation.scaleIn(
+                        initialScale = 0.97f,
+                        animationSpec = androidx.compose.animation.core.tween(AppMotion.durationLong)
+                    )
                 },
                 exitTransition = {
-                    androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(300))
+                    androidx.compose.animation.fadeOut(
+                        animationSpec = androidx.compose.animation.core.tween(AppMotion.exitDuration)
+                    )
                 },
                 popEnterTransition = {
-                    androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(300))
+                    androidx.compose.animation.fadeIn(
+                        animationSpec = androidx.compose.animation.core.tween(AppMotion.durationMedium)
+                    )
                 },
                 popExitTransition = {
-                    androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(300)) +
-                    androidx.compose.animation.scaleOut(targetScale = 0.98f, animationSpec = androidx.compose.animation.core.tween(300))
+                    androidx.compose.animation.fadeOut(
+                        animationSpec = androidx.compose.animation.core.tween(AppMotion.exitDuration)
+                    ) + androidx.compose.animation.scaleOut(
+                        targetScale = 0.97f,
+                        animationSpec = androidx.compose.animation.core.tween(AppMotion.exitDuration)
+                    )
                 }
             ) {
-                composable("today") { HomeScreen(navController = navController, viewModel = viewModel) }
+                composable("today") {
+                    HomeScreen(
+                        navController = navController,
+                        viewModel = viewModel,
+                        onScrollStateChange = { scrollingDown -> isFabScrolledDown = scrollingDown }
+                    )
+                }
                 composable("calendar") { CalendarScreen(navController = navController, viewModel = viewModel) }
                 composable("journal") {
                     JournalScreen(
@@ -203,6 +234,8 @@ private fun AppNavHost(viewModel: HabitViewModel) {
                     .align(Alignment.BottomEnd)
                     // FAB sits 108dp from bottom: dock(68) + dock-bottom-pad(20) + gap(20)
                     .offset(x = (-24).dp, y = (-108).dp)
+                    // Subtle fade when user scrolls into content — quiet, not aggressive
+                    .graphicsLayer { alpha = fabAlpha }
                     .then(
                         if (!darkMode) Modifier.shadow(
                             elevation = if (isFabPressed) 6.dp else 4.dp,
@@ -236,13 +269,15 @@ private fun BottomNavBar(
     darkMode: Boolean,
     modifier: Modifier = Modifier
 ) {
-    val items = listOf(
-        BottomNavItem("today", "Today", Icons.Filled.CheckCircle),
-        BottomNavItem("calendar", "Calendar", Icons.Filled.DateRange),
-        BottomNavItem("journal", "Journal", Icons.Filled.EditNote),
-        BottomNavItem("insights", "Insights", Icons.AutoMirrored.Filled.ShowChart),
-        BottomNavItem("settings", "Settings", Icons.Filled.Settings)
-    )
+    val items = remember {
+        listOf(
+            BottomNavItem("today", "Today", Icons.Filled.CheckCircle),
+            BottomNavItem("calendar", "Calendar", Icons.Filled.DateRange),
+            BottomNavItem("journal", "Journal", Icons.Filled.EditNote),
+            BottomNavItem("insights", "Insights", Icons.AutoMirrored.Filled.ShowChart),
+            BottomNavItem("settings", "Settings", Icons.Filled.Settings)
+        )
+    }
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = navBackStackEntry?.destination
