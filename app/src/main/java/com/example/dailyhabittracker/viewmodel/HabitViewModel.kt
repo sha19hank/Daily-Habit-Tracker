@@ -42,7 +42,8 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
 
     // Read the persisted dark mode value synchronously at init time so the
     // very first composition uses the correct theme — prevents Light-theme flash on launch.
-    private val initialDarkMode: Boolean = runBlocking { settings.darkModeEnabled().first() }
+    // internal (not private) so MainActivity can set the window background before setContent.
+    internal val initialDarkMode: Boolean = runBlocking { settings.darkModeEnabled().first() }
 
     private val habitsFlow = repository.getHabits()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())

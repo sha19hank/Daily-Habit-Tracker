@@ -132,21 +132,35 @@ fun HomeScreen(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Daily Habit Tracker") },
+                title = {
+                    Text(
+                        text = "Mlue",
+                        style = androidx.compose.material3.MaterialTheme.typography.titleLarge
+                    )
+                },
                 actions = {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Tighter, more intentional header rhythm
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        modifier = Modifier.padding(end = 4.dp)
+                    ) {
                         FilterChip(
                             selected = focusMode,
                             onClick = { viewModel.setFocusMode(!focusMode) },
                             label = { Text("Focus") }
                         )
-                        Spacer(modifier = Modifier.width(12.dp))
+                        // Tighter gap between chip and star
+                        Spacer(modifier = Modifier.width(4.dp))
                         Icon(
                             imageVector = Icons.Filled.Star,
-                            contentDescription = "Tokens"
+                            contentDescription = "Tokens",
+                            modifier = Modifier.size(18.dp)
                         )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(text = tokenCount.toString())
+                        Text(
+                            text = tokenCount.toString(),
+                            style = androidx.compose.material3.MaterialTheme.typography.bodyMedium
+                        )
                     }
                 }
             )

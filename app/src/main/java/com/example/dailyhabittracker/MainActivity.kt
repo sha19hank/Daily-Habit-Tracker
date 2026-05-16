@@ -1,5 +1,6 @@
 package com.example.dailyhabittracker
 
+import android.graphics.Color as AndroidColor
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -65,6 +66,16 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // Set window background BEFORE setContent so the first frame never shows wrong theme.
+        // initialDarkMode is already loaded synchronously via runBlocking in the ViewModel —
+        // no extra I/O here. This covers DataStore-dark + system-light combinations.
+        val bgColor = if (viewModel.initialDarkMode)
+            AndroidColor.parseColor("#0A0C10")   // DarkBackground editorial token
+        else
+            AndroidColor.parseColor("#F5F1EA")   // LightBackground editorial token
+        window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(bgColor))
+
         setContent {
             val darkMode by viewModel.darkModeEnabled.collectAsState()
             DailyHabitTrackerTheme(darkTheme = darkMode) {
