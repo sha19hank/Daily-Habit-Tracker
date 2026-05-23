@@ -5,15 +5,15 @@ plugins {
 }
 
 android {
-    namespace = "com.example.dailyhabittracker"
+    namespace = "com.mlue.app"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.example.dailyhabittracker"
+        applicationId = "com.mlue.app"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
-        versionName = "1.0"
+        versionCode = 2
+        versionName = "1.1"
 
         vectorDrawables {
             useSupportLibrary = true
@@ -22,7 +22,8 @@ android {
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
+            isShrinkResources = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
