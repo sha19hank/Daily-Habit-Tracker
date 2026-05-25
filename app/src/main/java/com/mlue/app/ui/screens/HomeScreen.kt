@@ -459,10 +459,19 @@ fun HomeScreen(
                     horizontalArrangement = Arrangement.SpaceBetween,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Text(
-                        text = "Today's habits",
-                        style = androidx.compose.material3.MaterialTheme.typography.titleMedium
-                    )
+                    Column {
+                        Text(
+                            text = "Today's habits",
+                            style = androidx.compose.material3.MaterialTheme.typography.titleMedium
+                        )
+                        if (focusMode) {
+                            Text(
+                                text = "Focus mode active",
+                                style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
                     if (!focusMode) {
                         // Box gives DropdownMenu a stable, fixed anchor point.
                         // Without this, DropdownMenu anchors relative to the parent Row,
@@ -501,21 +510,37 @@ fun HomeScreen(
 
             if (displayHabits.isEmpty()) {
                 item(key = "empty") {
-                    val emptyQuote = remember(today) {
-                        emptyStateQuotes[today.dayOfYear % emptyStateQuotes.size]
-                    }
-                    Column(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(vertical = 24.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    val isEmptyLight = androidx.compose.material3.MaterialTheme.colorScheme.background.luminance() > 0.5f
+                    androidx.compose.material3.Surface(
+                        color = if (isEmptyLight) com.mlue.app.ui.theme.LightSurface else com.mlue.app.ui.theme.DarkSurface,
+                        shape = androidx.compose.material3.MaterialTheme.shapes.large,
+                        border = if (isEmptyLight) BorderStroke(1.dp, androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant) else null,
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Text(
-                            text = emptyQuote,
-                            style = androidx.compose.material3.MaterialTheme.typography.bodyLarge,
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        Column(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(vertical = 48.dp, horizontal = 32.dp),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Text(
+                                text = "🌱",
+                                style = androidx.compose.material3.MaterialTheme.typography.headlineLarge
+                            )
+                            Text(
+                                text = "Your first habit awaits",
+                                style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurface,
+                                textAlign = TextAlign.Center
+                            )
+                            Text(
+                                text = "Tap + below to begin building your streak",
+                                style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
+                                textAlign = TextAlign.Center
+                            )
+                        }
                     }
                 }
             }
@@ -688,14 +713,6 @@ fun HomeScreen(
 }
 
 private val reflectionLines = listOf(
-    "small steps compound.",
-    "progress is built daily.",
-    "quiet consistency matters.",
-    "showing up still counts.",
-    "momentum starts quietly."
-)
-
-private val emptyStateQuotes = listOf(
     "small steps compound.",
     "progress is built daily.",
     "quiet consistency matters.",

@@ -1,6 +1,7 @@
 package com.mlue.app.ui.screens
 
 import androidx.compose.animation.Crossfade
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
@@ -146,7 +147,7 @@ fun CalendarScreen(navController: NavController, viewModel: HabitViewModel) {
 
                     Crossfade(
                         targetState = displayedMonth,
-                        animationSpec = tween(durationMillis = 220),
+                        animationSpec = tween(durationMillis = com.mlue.app.ui.theme.AppMotion.durationMedium),
                         label = "monthFade"
                     ) { targetMonth ->
                         CalendarMonthGrid(
@@ -320,14 +321,24 @@ private fun CalendarHeatmapCell(
         else -> MaterialTheme.colorScheme.primary.copy(alpha = 0.9f)
     }
 
+    val animatedColor by animateColorAsState(
+        targetValue = backgroundColor,
+        animationSpec = tween(durationMillis = com.mlue.app.ui.theme.AppMotion.durationShort),
+        label = "cellColor"
+    )
+
     val isPerfect = rate >= 1f && scheduled > 0
     val isToday = date == LocalDate.now()
 
     Surface(
         modifier = modifier.clickable { onClick() },
-        color = backgroundColor,
+        color = animatedColor,
         shape = RoundedCornerShape(12.dp),
-        border = if (isPerfect) BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)) else if (isToday) BorderStroke(1.dp, MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)) else null,
+        border = when {
+            isPerfect -> androidx.compose.foundation.BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
+            isToday -> androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
+            else -> null
+        },
         tonalElevation = if (isPerfect) 8.dp else 0.dp
     ) {
         Box(contentAlignment = Alignment.Center, modifier = Modifier.fillMaxSize()) {

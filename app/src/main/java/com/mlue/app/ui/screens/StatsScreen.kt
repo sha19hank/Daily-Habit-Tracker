@@ -5,6 +5,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
@@ -661,15 +663,16 @@ fun StatsScreen(
 
 @Composable
 private fun WeeklyBars(weeklyStats: List<DailyStats>) {
-    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    val isLightMode = MaterialTheme.colorScheme.background.luminance() > 0.5f
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         weeklyStats.forEach { stats ->
-            val fraction = stats.completionRate  // 0.0..1.0, division-by-zero safe
+            val fraction = stats.completionRate
             val isToday = stats.date == LocalDate.now()
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier.fillMaxWidth()
             ) {
-                // Day label
+                // Day label — 3-char, primary accent on today
                 Text(
                     text = stats.date.dayOfWeek.name.take(3),
                     modifier = Modifier.width(40.dp),
@@ -679,26 +682,32 @@ private fun WeeklyBars(weeklyStats: List<DailyStats>) {
                 )
                 Spacer(modifier = Modifier.width(8.dp))
 
-                // Progress bar — always renders at a minimum 2% so empty days are visible
                 val animatedFraction by animateFloatAsState(
                     targetValue = if (stats.scheduled == 0) 0f
                                   else fraction.coerceAtLeast(0.02f),
+                    animationSpec = com.mlue.app.ui.theme.AppMotion.floatTween(
+                        com.mlue.app.ui.theme.AppMotion.durationLong
+                    ),
                     label = "weekBar_${stats.date}"
                 )
                 Box(
                     modifier = Modifier
                         .weight(1f)
-                        .height(14.dp)
+                        .height(10.dp)
+                        .clip(MaterialTheme.shapes.small)
                         .background(
-                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f),
-                            shape = MaterialTheme.shapes.small
+                            color = if (isLightMode)
+                                com.mlue.app.ui.theme.LightOutlineVariant.copy(alpha = 0.5f)
+                            else
+                                com.mlue.app.ui.theme.DarkSurfaceVariant.copy(alpha = 0.6f)
                         )
                 ) {
                     if (stats.scheduled > 0) {
                         Box(
                             modifier = Modifier
                                 .fillMaxWidth(animatedFraction)
-                                .height(14.dp)
+                                .fillMaxHeight()
+                                .clip(MaterialTheme.shapes.small)
                                 .background(
                                     brush = Brush.horizontalGradient(
                                         colors = if (fraction >= 1f)
@@ -708,18 +717,16 @@ private fun WeeklyBars(weeklyStats: List<DailyStats>) {
                                             )
                                         else
                                             listOf(
-                                                MaterialTheme.colorScheme.primary.copy(alpha = 0.5f),
+                                                MaterialTheme.colorScheme.primary.copy(alpha = 0.55f),
                                                 MaterialTheme.colorScheme.primary
                                             )
-                                    ),
-                                    shape = MaterialTheme.shapes.small
+                                    )
                                 )
                         )
                     }
                 }
 
                 Spacer(modifier = Modifier.width(8.dp))
-                // Completion fraction label
                 Text(
                     text = if (stats.scheduled == 0) "—"
                            else "${stats.completed}/${stats.scheduled}",

@@ -117,9 +117,15 @@ fun HabitCard(
     )
     // Checkbox completion pop — tiny, fast, felt more than seen
     val checkboxScale by animateFloatAsState(
-        targetValue = if (isCompletedToday) 1.08f else 1f,
+        targetValue = if (isCompletedToday) 1.05f else 1f,
         animationSpec = AppMotion.checkboxPop(),
         label = "checkboxScale"
+    )
+    // Completed cards: secondary metadata quietly dims — feels intentional, not broken
+    val metadataAlpha by animateFloatAsState(
+        targetValue = if (isCompletedToday) 0.5f else 1f,
+        animationSpec = AppMotion.floatTween(AppMotion.durationMedium),
+        label = "metadataAlpha"
     )
 
     Card(
@@ -178,7 +184,8 @@ fun HabitCard(
                         Text(
                             text = "Streak: ${habit.currentStreak}",
                             style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.graphicsLayer { alpha = metadataAlpha }
                         )
                         if (goalTitle != null) {
                             Spacer(modifier = Modifier.height(4.dp))
@@ -192,6 +199,7 @@ fun HabitCard(
                                         overflow = TextOverflow.Ellipsis
                                     )
                                 },
+                                modifier = Modifier.graphicsLayer { alpha = metadataAlpha },
                                 border = androidx.compose.foundation.BorderStroke(
                                     1.dp,
                                     MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
@@ -233,10 +241,10 @@ fun HabitCard(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
-                        OutlinedButton(onClick = onTogglePause) {
+                        androidx.compose.material3.FilledTonalButton(onClick = onTogglePause) {
                             Text(text = if (isPaused) "Resume" else "Pause", maxLines = 1)
                         }
-                        Button(onClick = onFreeze, enabled = canFreeze) {
+                        androidx.compose.material3.FilledTonalButton(onClick = onFreeze, enabled = canFreeze) {
                             Text(text = "Freeze", maxLines = 1)
                         }
                         OutlinedButton(onClick = onEdit) {

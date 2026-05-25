@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.IntOffset
 object AppMotion {
 
     // ── Durations ────────────────────────────────────────────────────────────
+    const val durationMicro  = 120   // instant tap acknowledgment (scale pop, alpha nudge)
     const val durationShort  = 160   // micro interactions (checkbox, icon tint)
     const val durationMedium = 220   // card color/scale transitions
     const val durationLong   = 280   // screen enter transitions
@@ -36,6 +37,9 @@ object AppMotion {
 
     /** Dp transitions — elevation changes */
     fun dpTween() = tween<Dp>(durationMillis = durationShort, easing = FastOutSlowInEasing)
+
+    /** Tween-based scale press — deterministic, no spring overshoot */
+    fun pressTween() = tween<Float>(durationMillis = durationMicro, easing = FastOutSlowInEasing)
 
     // ── Spring specs ─────────────────────────────────────────────────────────
     /**
