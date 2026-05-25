@@ -58,6 +58,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.ui.graphics.luminance
 import com.mlue.app.R
@@ -79,7 +84,9 @@ fun HomeScreen(
     val stepState by viewModel.stepState.collectAsState()
     val focusMode by viewModel.focusModeEnabled.collectAsState()
     val haptics by viewModel.hapticsEnabled.collectAsState()
-    val darkMode by viewModel.darkModeEnabled.collectAsState()
+    val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
+    val cachedTheme = viewModel.getCachedTheme()
+    val darkMode by viewModel.darkModeEnabled.collectAsState(initial = cachedTheme ?: systemDark)
     val activeGoal by viewModel.activeGoal.collectAsState()
     val goals by viewModel.goals.collectAsState()
     val goalProgress by viewModel.goalProgress.collectAsState()
@@ -126,6 +133,20 @@ fun HomeScreen(
         onScrollStateChange(isScrollingDown)
     }
 
+    var milestoneEvent by remember { mutableStateOf<com.mlue.app.viewmodel.MilestoneEvent?>(null) }
+    LaunchedEffect(viewModel) {
+        viewModel.milestoneEvents.collect { event ->
+            if (haptics) {
+                haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            }
+            milestoneEvent = event
+            kotlinx.coroutines.delay(2200)
+            if (milestoneEvent == event) {
+                milestoneEvent = null
+            }
+        }
+    }
+
     // Hoisted ABOVE LazyColumn — pagerState inside a lazy item is unstable across recompositions
     val goalPagerState = rememberPagerState(pageCount = { carouselGoals.size })
 
@@ -167,10 +188,9 @@ fun HomeScreen(
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(padding),
+        Box(modifier = Modifier.fillMaxSize().padding(padding)) {
+            LazyColumn(
+                modifier = Modifier.fillMaxSize(),
             state = listState,
             contentPadding = PaddingValues(start = 24.dp, top = 24.dp, end = 24.dp, bottom = 104.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
@@ -481,6 +501,9 @@ fun HomeScreen(
 
             if (displayHabits.isEmpty()) {
                 item(key = "empty") {
+                    val emptyQuote = remember(today) {
+                        emptyStateQuotes[today.dayOfYear % emptyStateQuotes.size]
+                    }
                     Column(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -489,15 +512,9 @@ fun HomeScreen(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            text = "Nothing tracked yet.",
-                            style = androidx.compose.material3.MaterialTheme.typography.titleSmall,
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurface
-                        )
-                        Text(
-                            text = "Add your first habit to begin.",
-                            style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
-                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                            textAlign = TextAlign.Center
+                            text = emptyQuote,
+                            style = androidx.compose.material3.MaterialTheme.typography.bodyLarge,
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
@@ -623,14 +640,65 @@ fun HomeScreen(
                     }
                 }
             }
+
+            }
+            // End of LazyColumn
+
+            AnimatedVisibility(
+                visible = milestoneEvent != null,
+                enter = slideInVertically(initialOffsetY = { it / 2 }, animationSpec = androidx.compose.animation.core.tween(com.mlue.app.ui.theme.AppMotion.durationMedium)) + fadeIn(animationSpec = com.mlue.app.ui.theme.AppMotion.floatTween()),
+                exit = slideOutVertically(targetOffsetY = { it / 2 }, animationSpec = androidx.compose.animation.core.tween(com.mlue.app.ui.theme.AppMotion.durationMedium)) + fadeOut(animationSpec = com.mlue.app.ui.theme.AppMotion.floatTween()),
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 120.dp, start = 24.dp, end = 24.dp)
+            ) {
+                milestoneEvent?.let { event ->
+                    val isLightMode = androidx.compose.material3.MaterialTheme.colorScheme.background.luminance() > 0.5f
+                    val copy = when (event.streak) {
+                        3 -> "3 day streak — a strong beginning."
+                        7 -> "7 day streak — momentum is building."
+                        14 -> "14 days — consistency is becoming a pattern."
+                        30 -> "30 days — this rhythm is real now."
+                        else -> "${event.streak} days — incredible momentum."
+                    }
+                    Surface(
+                        color = if (isLightMode) com.mlue.app.ui.theme.LightHeroCardBackground else com.mlue.app.ui.theme.DarkSurfaceVariant,
+                        shape = androidx.compose.material3.MaterialTheme.shapes.large,
+                        shadowElevation = 8.dp,
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        androidx.compose.foundation.layout.Row(
+                            modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                text = copy,
+                                style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
+                                color = if (isLightMode) com.mlue.app.ui.theme.LightHeroCardOnSurface else com.mlue.app.ui.theme.DarkOnBackground,
+                                textAlign = TextAlign.Center
+                            )
+                        }
+                    }
+                }
+            }
         }
     }
 
 }
 
 private val reflectionLines = listOf(
-    "Consistency begins quietly.",
-    "Today is a fresh opportunity.",
-    "Small steps compound.",
-    "Progress is built daily."
+    "small steps compound.",
+    "progress is built daily.",
+    "quiet consistency matters.",
+    "showing up still counts.",
+    "momentum starts quietly."
+)
+
+private val emptyStateQuotes = listOf(
+    "small steps compound.",
+    "progress is built daily.",
+    "quiet consistency matters.",
+    "showing up still counts.",
+    "momentum starts quietly."
 )

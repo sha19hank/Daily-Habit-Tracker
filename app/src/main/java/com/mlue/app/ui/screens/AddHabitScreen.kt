@@ -235,7 +235,8 @@ fun AddHabitScreen(
                             goalExpanded = false
                         }
                     )
-                    goals.forEach { goal ->
+                    val activeGoals = goals.filter { !it.isCompleted }
+                    activeGoals.forEach { goal ->
                         DropdownMenuItem(
                             text = { Text(goal.title) },
                             onClick = {

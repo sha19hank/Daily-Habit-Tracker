@@ -46,6 +46,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import kotlinx.coroutines.launch
 import androidx.compose.ui.Modifier
+import androidx.compose.runtime.derivedStateOf
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
@@ -85,6 +87,12 @@ fun StatsScreen(
     var goalStartDate by rememberSaveable { mutableStateOf(LocalDate.now()) }
     var goalDeadline by rememberSaveable { mutableStateOf<LocalDate?>(null) }
     var goalToDelete by remember { mutableStateOf<com.mlue.app.data.GoalEntity?>(null) }
+    
+    val activeGoals by remember(goals) { derivedStateOf { goals.filter { !it.isCompleted } } }
+    val completedGoals by remember(goals) { derivedStateOf { goals.filter { it.isCompleted } } }
+    val consistencyScore by viewModel.consistencyScore.collectAsState()
+    val haptics by viewModel.hapticsEnabled.collectAsState()
+    val haptic = LocalHapticFeedback.current
     val snackbarHostState = remember { androidx.compose.material3.SnackbarHostState() }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
 
@@ -131,7 +139,7 @@ fun StatsScreen(
             val isLightStats = MaterialTheme.colorScheme.background.luminance() > 0.5f
             // Explicit static token — tonalElevation alone triggers Material You tint on OEMs
             Surface(
-                color = if (isLightStats) com.mlue.app.ui.theme.LightSurfaceVariant
+                color = if (isLightStats) com.mlue.app.ui.theme.LightSurface
                         else com.mlue.app.ui.theme.DarkSurface,
                 shape = MaterialTheme.shapes.medium
             ) {
@@ -141,8 +149,8 @@ fun StatsScreen(
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(text = "Goals", style = MaterialTheme.typography.titleMedium)
-                    if (goals.isEmpty()) {
+                    Text(text = "Active Goals", style = MaterialTheme.typography.titleMedium)
+                    if (activeGoals.isEmpty()) {
                         Text(
                             text = "Patterns appear with time.",
                             style = MaterialTheme.typography.bodySmall,
@@ -161,7 +169,7 @@ fun StatsScreen(
                             Text("Create Goal")
                         }
                     } else {
-                        goals.forEach { goal ->
+                        activeGoals.forEach { goal ->
                             val isHighlighted = highlightGoalId == goal.goalId
                             val isLightStats2 = MaterialTheme.colorScheme.background.luminance() > 0.5f
                             Surface(
@@ -169,7 +177,7 @@ fun StatsScreen(
                                 color = if (isHighlighted)
                                     MaterialTheme.colorScheme.primaryContainer
                                 else if (isLightStats2)
-                                    com.mlue.app.ui.theme.LightSurface
+                                    com.mlue.app.ui.theme.LightSurfaceVariant
                                 else
                                     com.mlue.app.ui.theme.DarkSurface,
                                 shape = MaterialTheme.shapes.small,
@@ -243,6 +251,19 @@ fun StatsScreen(
                                         progress = { animatedProgress },
                                         modifier = Modifier.fillMaxWidth().height(6.dp)
                                     )
+                                    
+                                    if (overallPercent == 100 && !goal.isCompleted) {
+                                        Button(
+                                            onClick = {
+                                                if (haptics) haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                                viewModel.completeGoal(goal)
+                                                scope.launch { snackbarHostState.showSnackbar("Goal completed!") }
+                                            },
+                                            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                                        ) {
+                                            Text("Complete Goal")
+                                        }
+                                    }
 
                                     if (progressDetails != null && progressDetails.habitProgresses.isNotEmpty()) {
                                         Column(
@@ -299,6 +320,39 @@ fun StatsScreen(
                 }
             }
 
+            if (completedGoals.isNotEmpty()) {
+                Surface(
+                    color = if (isLightStats) com.mlue.app.ui.theme.LightSurface
+                            else com.mlue.app.ui.theme.DarkSurface,
+                    shape = MaterialTheme.shapes.medium
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(text = "Completed Goals", style = MaterialTheme.typography.titleMedium)
+                        completedGoals.forEach { goal ->
+                            Surface(
+                                color = if (isLightStats) com.mlue.app.ui.theme.LightSurfaceVariant else com.mlue.app.ui.theme.DarkSurface,
+                                shape = MaterialTheme.shapes.small,
+                                modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp)
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text(text = goal.title, style = MaterialTheme.typography.bodyMedium)
+                                    Text(
+                                        text = "Completed: ${goal.completedDate ?: "Unknown"}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
 
 
             if (weeklySummary.isEmpty() && monthlyCount == 0) {
@@ -309,21 +363,24 @@ fun StatsScreen(
                 )
             } else {
                 val isLightStats = MaterialTheme.colorScheme.background.luminance() > 0.5f
-                Text(text = "Weekly Summary", style = MaterialTheme.typography.titleLarge)
                 // Explicit containerColor — tonalElevation alone can bleed Material You tint on OEMs
                 Surface(
-                    color = if (isLightStats) com.mlue.app.ui.theme.LightSurfaceVariant
+                    color = if (isLightStats) com.mlue.app.ui.theme.LightSurface
                             else com.mlue.app.ui.theme.DarkSurface,
                     shape = MaterialTheme.shapes.medium
                 ) {
-                    Column(modifier = Modifier.padding(16.dp)) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Text(text = "Weekly Summary", style = MaterialTheme.typography.titleLarge)
                         WeeklyBars(weeklyStats = weeklyStats)
                     }
                 }
 
                 Spacer(modifier = Modifier.height(8.dp))
                 Surface(
-                    color = if (isLightStats) com.mlue.app.ui.theme.LightSurfaceVariant
+                    color = if (isLightStats) com.mlue.app.ui.theme.LightSurface
                             else com.mlue.app.ui.theme.DarkSurface,
                     shape = MaterialTheme.shapes.medium
                 ) {
@@ -341,7 +398,7 @@ fun StatsScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
                 Surface(
-                    color = if (isLightStats) com.mlue.app.ui.theme.LightSurfaceVariant
+                    color = if (isLightStats) com.mlue.app.ui.theme.LightSurface
                             else com.mlue.app.ui.theme.DarkSurface,
                     shape = MaterialTheme.shapes.medium
                 ) {
@@ -355,7 +412,19 @@ fun StatsScreen(
                         val totalCompleted = weeklyStats.sumOf { it.completed }
                         val weekRate = if (totalScheduled > 0)
                             (totalCompleted * 100) / totalScheduled else 0
-                        Text(text = "Weekly review", style = MaterialTheme.typography.titleMedium)
+                            
+                        val weekLabel = when {
+                            weekRate == 100 -> "Perfect consistency"
+                            weekRate >= 80 -> "Strong momentum"
+                            weekRate >= 50 -> "Building consistency"
+                            else -> "Room to rebuild"
+                        }
+                        Text(text = "Weekly Recap", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            text = weekLabel,
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
                         Text(
                             text = "$totalCompleted of $totalScheduled scheduled habits completed ($weekRate%)",
                             style = MaterialTheme.typography.bodySmall,
@@ -368,12 +437,40 @@ fun StatsScreen(
                         )
                     }
                 }
+
+                Spacer(modifier = Modifier.height(8.dp))
+                Surface(
+                    color = if (isLightStats) com.mlue.app.ui.theme.LightSurface
+                            else com.mlue.app.ui.theme.DarkSurface,
+                    shape = MaterialTheme.shapes.medium
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        val scoreLabel = when {
+                            consistencyScore >= 90 -> "Excellent"
+                            consistencyScore >= 75 -> "Strong"
+                            consistencyScore >= 50 -> "Improving"
+                            consistencyScore >= 30 -> "Inconsistent"
+                            else -> "Restarting"
+                        }
+                        Text(text = "Consistency Score", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            text = "$consistencyScore · $scoreLabel",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
             }
 
             if (!focusMode && insights.isNotEmpty()) {
                 Surface(
                     color = if (MaterialTheme.colorScheme.background.luminance() > 0.5f)
-                        com.mlue.app.ui.theme.LightSurfaceVariant
+                        com.mlue.app.ui.theme.LightSurface
                     else
                         com.mlue.app.ui.theme.DarkSurface,
                     shape = MaterialTheme.shapes.medium

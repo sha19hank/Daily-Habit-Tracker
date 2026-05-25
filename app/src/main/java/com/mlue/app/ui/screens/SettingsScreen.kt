@@ -24,7 +24,9 @@ import com.mlue.app.viewmodel.HabitViewModel
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
 fun SettingsScreen(navController: NavController, viewModel: HabitViewModel) {
-    val darkMode by viewModel.darkModeEnabled.collectAsState()
+    val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
+    val cachedTheme = viewModel.getCachedTheme()
+    val darkMode by viewModel.darkModeEnabled.collectAsState(initial = cachedTheme ?: systemDark)
     val sounds by viewModel.soundsEnabled.collectAsState()
     val focusMode by viewModel.focusModeEnabled.collectAsState()
     val haptics by viewModel.hapticsEnabled.collectAsState()

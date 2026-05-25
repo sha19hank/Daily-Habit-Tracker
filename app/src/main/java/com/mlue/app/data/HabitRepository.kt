@@ -43,6 +43,10 @@ class HabitRepository(
         goalDao.updateGoal(goal)
     }
 
+    suspend fun markGoalCompleted(goalId: Long, completed: Boolean, date: LocalDate?) {
+        goalDao.markGoalCompleted(goalId, completed, date?.toString())
+    }
+
     suspend fun deleteGoal(goal: GoalEntity) {
         database.withTransaction {
             dao.clearGoalIdForHabits(goal.goalId)
@@ -108,14 +112,14 @@ class HabitRepository(
         return dao.insertHabit(habit)
     }
 
-    suspend fun markCompleted(habit: HabitEntity, today: LocalDate) {
-        if (habit.paused) return
-        if (!isScheduledForDay(habit, today)) return
-        if (habit.lastCompletedDate == today) return
-        if (habit.lastCompletedDate != null && habit.lastCompletedDate.isAfter(today)) return
+    suspend fun markCompleted(habit: HabitEntity, today: LocalDate): Int? {
+        if (habit.paused) return null
+        if (!isScheduledForDay(habit, today)) return null
+        if (habit.lastCompletedDate == today) return null
+        if (habit.lastCompletedDate != null && habit.lastCompletedDate.isAfter(today)) return null
 
         val completedToday = dao.hasCompletionForDate(habit.id, today.toString()) > 0
-        if (completedToday) return
+        if (completedToday) return null
 
         val lastCompleted = habit.lastCompletedDate
         val previousScheduled = previousScheduledDate(habit, today)
@@ -128,13 +132,17 @@ class HabitRepository(
         val tokenAward = milestoneTokenAward(newStreak)
         val alreadyAwarded = settings.hasAwardedTokenForHabitOnDate(habit.id, today)
 
+        val milestoneTrigger = newStreak > habit.highestCelebratedMilestone && newStreak in listOf(3, 7, 14, 30, 50, 100)
+        val updatedMilestone = if (milestoneTrigger) newStreak else habit.highestCelebratedMilestone
+
         database.withTransaction {
             val token = if (tokenAward > 0 && !alreadyAwarded) dao.getTokenOnce() ?: TokenEntity() else null
             dao.updateHabit(
                 habit.copy(
                     lastCompletedDate = today,
                     currentStreak = newStreak,
-                    longestStreak = longest
+                    longestStreak = longest,
+                    highestCelebratedMilestone = updatedMilestone
                 )
             )
             dao.insertCompletion(HabitCompletionEntity(habitId = habit.id, completionDate = today))
@@ -146,6 +154,8 @@ class HabitRepository(
             settings.setAwardedTokenForHabitOnDate(habit.id, today)
         }
         settings.clearPreviousStreak(habit.id)
+        
+        return if (milestoneTrigger) newStreak else null
     }
 
     suspend fun markUncompleted(habit: HabitEntity, today: LocalDate) {
@@ -204,6 +214,10 @@ class HabitRepository(
 
     suspend fun updateHabit(habit: HabitEntity) {
         dao.updateHabit(habit)
+    }
+
+    suspend fun updateHighestCelebratedMilestone(habitId: Long, milestone: Int) {
+        dao.updateHighestCelebratedMilestone(habitId, milestone)
     }
 
     suspend fun pauseHabit(habit: HabitEntity, paused: Boolean) {

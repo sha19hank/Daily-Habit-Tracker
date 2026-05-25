@@ -37,6 +37,9 @@ interface HabitDao {
     @Update
     suspend fun updateHabit(habit: HabitEntity)
 
+    @Query("UPDATE habits SET highestCelebratedMilestone = :milestone WHERE id = :habitId")
+    suspend fun updateHighestCelebratedMilestone(habitId: Long, milestone: Int)
+
     @Delete
     suspend fun deleteHabit(habit: HabitEntity)
 

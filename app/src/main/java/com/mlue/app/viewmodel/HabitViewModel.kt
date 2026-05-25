@@ -23,11 +23,14 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import android.util.Log
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.YearMonth
@@ -40,10 +43,9 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
     private val goalDeadlineScheduler: GoalDeadlineScheduler = container.goalDeadlineScheduler
     private val stepTracker: StepTracker = container.stepTracker
 
-    // Read the persisted dark mode value synchronously at init time so the
-    // very first composition uses the correct theme — prevents Light-theme flash on launch.
-    // internal (not private) so MainActivity can set the window background before setContent.
-    internal val initialDarkMode: Boolean = runBlocking { settings.darkModeEnabled().first() }
+    init {
+        Log.d("MlueStartup", "HabitViewModel: init started")
+    }
 
     private val habitsFlow = repository.getHabits()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -136,6 +138,34 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
     private val _habitHistory = MutableStateFlow<Map<Long, HabitHistory>>(emptyMap())
     val habitHistory: StateFlow<Map<Long, HabitHistory>> = _habitHistory.asStateFlow()
 
+    // 30-day Consistency Score (Task 3)
+    val consistencyScore: StateFlow<Int> = combine(
+        repository.getAllCompletionsFlow(),
+        habitsFlow
+    ) { completions, habits ->
+        val today = LocalDate.now()
+        val startDay = today.minusDays(29) // Last 30 days including today
+        var totalScheduled = 0
+        var totalCompleted = 0
+
+        val days = (0..29).map { startDay.plusDays(it.toLong()) }
+        
+        for (day in days) {
+            val completedToday = completions.count { it.completionDate == day }
+            val scheduledToday = habits.count { habit ->
+                !habit.paused &&
+                (habit.createdDate.isBefore(day) || habit.createdDate.isEqual(day)) &&
+                (habit.scheduledDays.isEmpty() || habit.scheduledDays.contains(day.dayOfWeek.value))
+            }
+            totalCompleted += completedToday
+            totalScheduled += scheduledToday
+        }
+
+        if (totalScheduled == 0) 0 else ((totalCompleted.toFloat() / totalScheduled) * 100).toInt().coerceIn(0, 100)
+    }
+    .distinctUntilChanged()
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), 0)
+
     val goalProgress: StateFlow<Map<Long, GoalProgressDetails>> = repository.getGoalProgressMapFlow()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
@@ -155,8 +185,9 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
     val selectedDayJournalEntries: StateFlow<List<JournalEntryEntity>> = _selectedDayJournalEntries.asStateFlow()
 
 
-    val darkModeEnabled: StateFlow<Boolean> = settings.darkModeEnabled()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), initialDarkMode)
+    val darkModeEnabled: Flow<Boolean> = settings.darkModeEnabled()
+    
+    fun getCachedTheme(): Boolean? = settings.getCachedTheme()
 
     val soundsEnabled: StateFlow<Boolean> = settings.soundsEnabled()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
@@ -166,6 +197,15 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
 
     val hapticsEnabled: StateFlow<Boolean> = settings.hapticsEnabled()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
+    val animationsEnabled: StateFlow<Boolean> = settings.animationsEnabled()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
+
+    private val _milestoneEvents = Channel<MilestoneEvent>(Channel.BUFFERED)
+    val milestoneEvents = _milestoneEvents.receiveAsFlow()
+
+    private val _goalCompletionEvents = Channel<GoalCompletionEvent>(Channel.BUFFERED)
+    val goalCompletionEvents = _goalCompletionEvents.receiveAsFlow()
 
     val tokenCount: StateFlow<Int> = repository.tokenFlow()
         .map { it?.count ?: 0 }
@@ -311,6 +351,14 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
+    fun completeGoal(goal: GoalEntity) {
+        viewModelScope.launch(Dispatchers.IO) {
+            repository.markGoalCompleted(goal.goalId, true, LocalDate.now())
+            _goalCompletionEvents.send(GoalCompletionEvent(goal.title))
+            goalDeadlineScheduler.scheduleAll()
+        }
+    }
+
     fun upsertJournalEntry(
         title: String,
         body: String,
@@ -336,7 +384,10 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
 
     fun markCompleted(habit: HabitEntity) {
         viewModelScope.launch(Dispatchers.IO) {
-            repository.markCompleted(habit, LocalDate.now())
+            val milestoneTriggered = repository.markCompleted(habit, LocalDate.now())
+            if (milestoneTriggered != null) {
+                _milestoneEvents.send(MilestoneEvent(habit.name, milestoneTriggered, habit.id))
+            }
             calendarDirty = true
             loadCalendar(_calendarMonth.value)
             // Reschedule next occurrence for this specific habit
@@ -351,7 +402,10 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
             if (completedToday) {
                 repository.markUncompleted(habit, today)
             } else {
-                repository.markCompleted(habit, today)
+                val milestoneTriggered = repository.markCompleted(habit, today)
+                if (milestoneTriggered != null) {
+                    _milestoneEvents.send(MilestoneEvent(habit.name, milestoneTriggered, habit.id))
+                }
             }
             calendarDirty = true
             loadCalendar(_calendarMonth.value)
@@ -480,6 +534,9 @@ data class ActiveGoalState(
     val goal: GoalEntity,
     val progressDetails: GoalProgressDetails
 )
+
+data class MilestoneEvent(val habitName: String, val streak: Int, val habitId: Long)
+data class GoalCompletionEvent(val goalTitle: String)
 
 /**
  * Per-day completion stats for the weekly summary chart.

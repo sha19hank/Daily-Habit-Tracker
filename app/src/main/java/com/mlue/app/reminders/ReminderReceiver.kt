@@ -22,6 +22,8 @@ class ReminderReceiver : BroadcastReceiver() {
         val habitName = intent.getStringExtra(EXTRA_HABIT_NAME) ?: return
         if (habitId <= 0L) return
 
+        android.util.Log.d("MlueStartup", "ReminderReceiver: onReceive for habitId=$habitId")
+
         // goAsync() keeps the BroadcastReceiver alive past onReceive() return
         // while we do IO work, avoiding main-thread blocking / ANR risk
         val pendingResult = goAsync()
@@ -65,6 +67,8 @@ class ReminderReceiver : BroadcastReceiver() {
 
                 // Reschedule the next occurrence for this habit
                 ReminderScheduler(context, dao).scheduleHabit(habit)
+            } catch (e: Exception) {
+                android.util.Log.e("MlueStartup", "ReminderReceiver: Caught exception during execution", e)
             } finally {
                 pendingResult.finish()
             }

@@ -22,5 +22,6 @@ data class HabitEntity(
     val createdDate: LocalDate = LocalDate.now(),
     val lastCompletedDate: LocalDate? = null,
     val currentStreak: Int = 0,
-    val longestStreak: Int = 0
+    val longestStreak: Int = 0,
+    val highestCelebratedMilestone: Int = 0
 )

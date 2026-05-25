@@ -10,5 +10,7 @@ data class GoalEntity(
     val title: String,
     val description: String? = null,
     val startDate: LocalDate,
-    val deadline: LocalDate? = null
+    val deadline: LocalDate? = null,
+    val isCompleted: Boolean = false,
+    val completedDate: LocalDate? = null
 )

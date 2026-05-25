@@ -68,18 +68,13 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-
-        // Set window background BEFORE setContent so the first frame never shows wrong theme.
-        // initialDarkMode is already loaded synchronously via runBlocking in the ViewModel —
-        // no extra I/O here. This covers DataStore-dark + system-light combinations.
-        val bgColor = if (viewModel.initialDarkMode)
-            AndroidColor.parseColor("#0A0C10")   // DarkBackground editorial token
-        else
-            AndroidColor.parseColor("#F5F1EA")   // LightBackground editorial token
-        window.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(bgColor))
+        android.util.Log.d("MlueStartup", "MainActivity: onCreate started")
 
         setContent {
-            val darkMode by viewModel.darkModeEnabled.collectAsState()
+            val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
+            val cachedTheme = viewModel.getCachedTheme()
+            val darkMode by viewModel.darkModeEnabled.collectAsState(initial = cachedTheme ?: systemDark)
+            
             DailyHabitTrackerTheme(darkTheme = darkMode) {
                 AppNavHost(viewModel = viewModel)
             }
@@ -90,8 +85,9 @@ class MainActivity : ComponentActivity() {
 @Composable
 private fun AppNavHost(viewModel: HabitViewModel) {
     val navController: NavHostController = rememberNavController()
-    val context = LocalContext.current
-    val darkMode by viewModel.darkModeEnabled.collectAsState()
+    val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
+    val cachedTheme = viewModel.getCachedTheme()
+    val darkMode by viewModel.darkModeEnabled.collectAsState(initial = cachedTheme ?: systemDark)
 
     val navBackStackEntry by navController.currentBackStackEntryAsState()
     val rawRoute = navBackStackEntry?.destination?.route ?: ""
@@ -195,7 +191,9 @@ private fun AppNavHost(viewModel: HabitViewModel) {
                     route = "insights?goalId={goalId}",
                     arguments = listOf(navArgument("goalId") { type = NavType.LongType; defaultValue = -1L })
                 ) { backStackEntry ->
-                    val goalId = backStackEntry.arguments?.getLong("goalId").takeIf { it != -1L }
+                    android.util.Log.d("MlueStartup", "MainActivity: restoring insights route")
+                    val goalIdArg = backStackEntry.arguments?.getLong("goalId", -1L) ?: -1L
+                    val goalId = if (goalIdArg != -1L) goalIdArg else null
                     StatsScreen(
                         navController = navController,
                         viewModel = viewModel,

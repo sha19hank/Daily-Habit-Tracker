@@ -13,11 +13,22 @@ import java.time.LocalDate
 private val Context.dataStore by preferencesDataStore(name = "settings")
 
 class SettingsRepository(private val context: Context) {
+    private val prefs = context.getSharedPreferences("theme_cache", Context.MODE_PRIVATE)
+
+    fun getCachedTheme(): Boolean? {
+        return if (prefs.contains("cached_theme")) {
+            prefs.getBoolean("cached_theme", false)
+        } else {
+            null
+        }
+    }
+
     private object Keys {
         val darkMode = booleanPreferencesKey("dark_mode")
         val sounds = booleanPreferencesKey("sounds")
         val focusMode = booleanPreferencesKey("focus_mode")
         val haptics = booleanPreferencesKey("haptics")
+        val animations = booleanPreferencesKey("animations")
         val stepBaseDate = stringPreferencesKey("step_base_date")
         val stepBaseValue = stringPreferencesKey("step_base_value")
         val stepCountDate = stringPreferencesKey("step_count_date")
@@ -28,8 +39,10 @@ class SettingsRepository(private val context: Context) {
     fun soundsEnabled(): Flow<Boolean> = context.dataStore.data.map { it[Keys.sounds] ?: true }
     fun focusModeEnabled(): Flow<Boolean> = context.dataStore.data.map { it[Keys.focusMode] ?: false }
     fun hapticsEnabled(): Flow<Boolean> = context.dataStore.data.map { it[Keys.haptics] ?: true }
+    fun animationsEnabled(): Flow<Boolean> = context.dataStore.data.map { it[Keys.animations] ?: true }
 
     suspend fun setDarkMode(enabled: Boolean) {
+        prefs.edit().putBoolean("cached_theme", enabled).apply()
         context.dataStore.edit { it[Keys.darkMode] = enabled }
     }
 
@@ -43,6 +56,10 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setHaptics(enabled: Boolean) {
         context.dataStore.edit { it[Keys.haptics] = enabled }
+    }
+
+    suspend fun setAnimations(enabled: Boolean) {
+        context.dataStore.edit { it[Keys.animations] = enabled }
     }
 
     suspend fun getStepBaseline(date: LocalDate): Int? {
