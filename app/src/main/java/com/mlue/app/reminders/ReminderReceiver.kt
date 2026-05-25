@@ -19,7 +19,7 @@ class ReminderReceiver : BroadcastReceiver() {
         if (intent.action != ACTION_REMINDER) return
 
         val habitId = intent.getLongExtra(EXTRA_HABIT_ID, -1L)
-        val habitName = intent.getStringExtra(EXTRA_HABIT_NAME) ?: return
+        if (intent.getStringExtra(EXTRA_HABIT_NAME) == null) return
         if (habitId <= 0L) return
 
         android.util.Log.d("MlueStartup", "ReminderReceiver: onReceive for habitId=$habitId")

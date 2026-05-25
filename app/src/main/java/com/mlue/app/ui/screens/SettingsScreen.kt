@@ -17,7 +17,7 @@ import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Bedtime
 import androidx.compose.material.icons.outlined.CenterFocusStrong
 import androidx.compose.material.icons.outlined.TouchApp
-import androidx.compose.material.icons.outlined.VolumeUp
+import androidx.compose.material.icons.automirrored.outlined.VolumeUp
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -98,7 +98,7 @@ fun SettingsScreen(navController: NavController, viewModel: HabitViewModel) {
             SettingsSectionLabel("Behaviour")
             SettingsCard(isLightMode = isLightMode) {
                 SettingsRow(
-                    icon = Icons.Outlined.VolumeUp,
+                    icon = Icons.AutoMirrored.Outlined.VolumeUp,
                     label = "Sounds",
                     description = "Completion sounds",
                     checked = sounds,

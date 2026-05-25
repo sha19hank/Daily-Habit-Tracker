@@ -101,7 +101,6 @@ fun HomeScreen(
     val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
     val cachedTheme = viewModel.getCachedTheme()
     val darkMode by viewModel.darkModeEnabled.collectAsState(initial = cachedTheme ?: systemDark)
-    val activeGoal by viewModel.activeGoal.collectAsState()
     val goals by viewModel.goals.collectAsState()
     val goalProgress by viewModel.goalProgress.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
@@ -178,8 +177,6 @@ fun HomeScreen(
     val dateLabel = remember(today) {
         today.format(DateTimeFormatter.ofPattern("EEEE, d MMMM", Locale.ENGLISH))
     }
-    val isLightHeader = androidx.compose.material3.MaterialTheme.colorScheme.background.luminance() > 0.5f
-
     // Hoisted ABOVE LazyColumn — pagerState inside a lazy item is unstable across recompositions
     val goalPagerState = rememberPagerState(pageCount = { carouselGoals.size })
 

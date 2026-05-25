@@ -30,10 +30,12 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import android.util.Log
+import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
 import java.time.YearMonth
+import java.time.temporal.ChronoUnit
+import com.mlue.app.data.HabitCompletionEntity
 
 class HabitViewModel(application: Application) : AndroidViewModel(application) {
     private val container = (application as DailyHabitTrackerApp).container
@@ -43,9 +45,7 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
     private val goalDeadlineScheduler: GoalDeadlineScheduler = container.goalDeadlineScheduler
     private val stepTracker: StepTracker = container.stepTracker
 
-    init {
-        Log.d("MlueStartup", "HabitViewModel: init started")
-    }
+
 
     private val habitsFlow = repository.getHabits()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -177,6 +177,63 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
             ActiveGoalState(active, progress[active.goalId] ?: GoalProgressDetails(0, emptyList()))
         }
     }.stateIn<ActiveGoalState?>(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    // ── Sprint 3A: Behavioral Intelligence ────────────────────────────────────
+    // All four flows are derived in-memory — no new DB queries, no DB migration.
+    // Every flow is cached with stateIn + WhileSubscribed so it suspends when
+    // the screen is not visible. distinctUntilChanged() prevents unnecessary
+    // downstream recomposition when computed output hasn't meaningfully changed.
+
+    // Single shared completions subscription — avoids two independent Room observers
+    // for the same query (monthlyAnalytics and behavioralPatterns both need it).
+    private val completionsFlow: StateFlow<List<HabitCompletionEntity>> =
+        repository.getAllCompletionsFlow()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val monthlyAnalytics: StateFlow<MonthlyAnalytics?> = combine(
+        completionsFlow,
+        habitsFlow
+    ) { completions, habits ->
+        computeMonthlyAnalytics(completions, habits, LocalDate.now())
+    }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
+    val behavioralPatterns: StateFlow<List<BehavioralPattern>> = combine(
+        completionsFlow,
+        habitsFlow
+    ) { completions, habits ->
+        detectBehavioralPatterns(completions, habits, LocalDate.now())
+    }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val goalHealthStates: StateFlow<Map<Long, GoalHealthState>> = combine(
+        goalsFlow,
+        goalProgress
+    ) { goals, progress ->
+        goals.associate { goal ->
+            goal.goalId to computeGoalHealth(goal, progress[goal.goalId], LocalDate.now())
+        }
+    }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+
+    /**
+     * Prioritized, semantically-deduplicated insights feed.
+     * Merges base weekly insights + behavioral patterns + monthly trend signal.
+     * Hard cap: 5 items. Existing [insights] StateFlow is preserved unchanged.
+     */
+    val prioritizedInsights: StateFlow<List<String>> = combine(
+        insights,
+        behavioralPatterns,
+        monthlyAnalytics
+    ) { baseInsights, patterns, monthly ->
+        buildPrioritizedInsights(baseInsights, patterns, monthly)
+    }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
 
     private val _selectedDayCompletedHabitIds = MutableStateFlow<List<Long>>(emptyList())
     val selectedDayCompletedHabitIds: StateFlow<List<Long>> = _selectedDayCompletedHabitIds.asStateFlow()
@@ -650,4 +707,395 @@ private fun selectActiveGoal(goals: List<GoalEntity>, today: LocalDate): GoalEnt
     }
 
     return goals.maxByOrNull { it.goalId }
+}
+
+// ── Sprint 3A: Analytics computation functions ────────────────────────────────
+// All functions are pure (no IO, no suspend). They run inside combine() lambdas
+// which execute on background dispatchers — never on the main thread.
+// ─────────────────────────────────────────────────────────────────────────────
+
+/**
+ * Shared utility mirroring HabitRepository.scheduledOccurrencesInRange.
+ * Duplicated here to avoid crossing the Repository abstraction boundary from
+ * file-level pure functions. O(days) — fast for any realistic month window.
+ */
+private fun habitScheduledInRange(habit: HabitEntity, start: LocalDate, end: LocalDate): Int {
+    if (end.isBefore(start)) return 0
+    val scheduled = habit.scheduledDays
+    val daysBetween = ChronoUnit.DAYS.between(start, end).toInt()
+    if (scheduled.isEmpty()) return daysBetween + 1
+    var count = 0
+    var date = start
+    repeat(daysBetween + 1) {
+        if (scheduled.contains(date.dayOfWeek.value)) count++
+        date = date.plusDays(1)
+    }
+    return count
+}
+
+/**
+ * Compute monthly behavioral analytics from raw completions and habit list.
+ * Returns null only when both active habits and completions are completely empty
+ * (fresh app with no data). All other states return a populated [MonthlyAnalytics].
+ */
+private fun computeMonthlyAnalytics(
+    completions: List<HabitCompletionEntity>,
+    habits: List<HabitEntity>,
+    today: LocalDate
+): MonthlyAnalytics? {
+    val activeHabits = habits.filter { !it.paused }
+    if (activeHabits.isEmpty() && completions.isEmpty()) return null
+
+    val currentMonth = YearMonth.from(today)
+    val prevMonth = currentMonth.minusMonths(1)
+    val monthStart = currentMonth.atDay(1)
+    val monthEnd = today
+    val prevMonthStart = prevMonth.atDay(1)
+    val prevMonthEnd = prevMonth.atEndOfMonth()
+
+    // ── Current month completions ──
+    val currentCompletions = completions.filter {
+        !it.completionDate.isBefore(monthStart) && !it.completionDate.isAfter(monthEnd)
+    }
+    val prevCompletions = completions.filter {
+        !it.completionDate.isBefore(prevMonthStart) && !it.completionDate.isAfter(prevMonthEnd)
+    }
+
+    val totalCompleted = currentCompletions.size
+    val totalScheduled = activeHabits.sumOf { habitScheduledInRange(it, monthStart, monthEnd) }
+    val completionPercent = if (totalScheduled > 0) (totalCompleted * 100) / totalScheduled else 0
+
+    // ── Previous month for trend ──
+    val prevScheduled = activeHabits.sumOf { habitScheduledInRange(it, prevMonthStart, prevMonthEnd) }
+    val prevPercent = if (prevScheduled > 0) (prevCompletions.size * 100) / prevScheduled else 0
+    val trend = completionPercent - prevPercent
+
+    // ── Strongest habit (most completions this month) ──
+    val completionsByHabit = currentCompletions.groupBy { it.habitId }
+    val strongestId = completionsByHabit.maxByOrNull { it.value.size }?.key
+    val strongestHabitName = habits.firstOrNull { it.id == strongestId }?.name
+
+    // ── Most missed weekday ──
+    // Pre-compute scheduled count per day-of-week to avoid O(habits) inner loop per day.
+    val scheduledCountByDow = (1..7).associateWith { dow ->
+        activeHabits.count { h -> h.scheduledDays.isEmpty() || h.scheduledDays.contains(dow) }
+    }
+    val daysBetween = ChronoUnit.DAYS.between(monthStart, monthEnd).toInt()
+    val missCountByDow = (1..7).associateWith { dow ->
+        val scheduledCount = scheduledCountByDow[dow] ?: 0
+        if (scheduledCount == 0) return@associateWith 0
+        var missed = 0
+        var date = monthStart
+        repeat(daysBetween + 1) {
+            if (date.dayOfWeek.value == dow) {
+                val completedCount = currentCompletions.count { it.completionDate == date }
+                if (completedCount < scheduledCount) missed++
+            }
+            date = date.plusDays(1)
+        }
+        missed
+    }
+    val mostMissedDow = missCountByDow.maxByOrNull { it.value }?.takeIf { it.value > 0 }?.key
+    val mostMissedWeekday = mostMissedDow?.let {
+        DayOfWeek.of(it).name.lowercase().replaceFirstChar { c -> c.uppercase() }
+    }
+
+    // ── Best active streak (proxy for peak monthly consistency) ──
+    val bestActiveStreak = habits.maxOfOrNull { it.currentStreak } ?: 0
+
+    val reflection = buildReflectionSummary(completionPercent, trend, totalCompleted, strongestHabitName)
+
+    return MonthlyAnalytics(
+        completionPercent = completionPercent,
+        totalCompleted = totalCompleted,
+        totalScheduled = totalScheduled,
+        strongestHabitName = strongestHabitName,
+        mostMissedWeekday = mostMissedWeekday,
+        bestActiveStreak = bestActiveStreak,
+        trendVsPreviousMonth = trend,
+        reflectionSummary = reflection
+    )
+}
+
+/**
+ * Detect lightweight behavioral patterns from the last 28 days.
+ * Returns up to 3 patterns, sorted by priority (1 = most important).
+ * Language is always observational and supportive — never diagnostic.
+ */
+private fun detectBehavioralPatterns(
+    completions: List<HabitCompletionEntity>,
+    habits: List<HabitEntity>,
+    today: LocalDate
+): List<BehavioralPattern> {
+    val patterns = mutableListOf<BehavioralPattern>()
+    val activeHabits = habits.filter { !it.paused }
+    val recent = completions.filter { !it.completionDate.isBefore(today.minusDays(27)) }
+
+    // Pattern 1: 7-day consistency window — all 7 days had at least one completion
+    if (activeHabits.isNotEmpty()) {
+        val last7 = (0..6).map { today.minusDays(it.toLong()) }
+        val activeDays7 = last7.count { date -> recent.any { it.completionDate == date } }
+        if (activeDays7 >= 7) {
+            patterns.add(BehavioralPattern(
+                message = "Seven consistent days — your rhythm is holding.",
+                priority = 1
+            ))
+        }
+    }
+
+    // Pattern 2: Recovery — a gap of 4+ days followed by recent return
+    if (recent.size >= 3) {
+        val sortedDates = recent.map { it.completionDate }.distinct().sorted()
+        var hadGap = false
+        for (i in 1 until sortedDates.size) {
+            if (ChronoUnit.DAYS.between(sortedDates[i - 1], sortedDates[i]).toInt() >= 4) {
+                hadGap = true
+                break
+            }
+        }
+        val returnedRecently = recent.any { !it.completionDate.isBefore(today.minusDays(3)) }
+        if (hadGap && returnedRecently) {
+            patterns.add(BehavioralPattern(
+                message = "After a quieter stretch, you found your way back — that counts.",
+                priority = 1
+            ))
+        }
+    }
+
+    // Pattern 3: Most missed weekday (≥ 65% miss rate over last 4 weeks)
+    if (activeHabits.isNotEmpty() && recent.isNotEmpty()) {
+        val scheduledByDow = (1..7).associateWith { dow ->
+            activeHabits.count { h -> h.scheduledDays.isEmpty() || h.scheduledDays.contains(dow) }
+        }
+        val missRateByDow = (1..7).associateWith { dow ->
+            val scheduledCount = scheduledByDow[dow] ?: 0
+            if (scheduledCount == 0) return@associateWith 0f
+            val daysOfType = (0..27).map { today.minusDays(it.toLong()) }
+                .filter { it.dayOfWeek.value == dow }
+            if (daysOfType.isEmpty()) return@associateWith 0f
+            val missedDays = daysOfType.count { date ->
+                val completed = recent.count { it.completionDate == date }
+                completed < scheduledCount
+            }
+            missedDays.toFloat() / daysOfType.size.toFloat()
+        }
+        val worstEntry = missRateByDow.maxByOrNull { it.value }
+        if (worstEntry != null && worstEntry.value >= 0.65f) {
+            val dayName = DayOfWeek.of(worstEntry.key).name
+                .lowercase().replaceFirstChar { it.uppercase() }
+            patterns.add(BehavioralPattern(
+                message = "${dayName}s tend to slip by a little more — worth knowing.",
+                priority = 2
+            ))
+        }
+    }
+
+    // Pattern 4: Focused list advantage — short habit list with high recent completion
+    if (activeHabits.size in 1..4) {
+        val last7Scheduled = activeHabits.sumOf { h ->
+            habitScheduledInRange(h, today.minusDays(6), today)
+        }
+        val last7Completed = recent.count { !it.completionDate.isBefore(today.minusDays(6)) }
+        val rate = if (last7Scheduled > 0) last7Completed.toFloat() / last7Scheduled else 0f
+        if (rate >= 0.75f) {
+            patterns.add(BehavioralPattern(
+                message = "A focused habit list is working well — consistency stays high.",
+                priority = 2
+            ))
+        }
+    }
+
+    // Pattern 5: Quiet habits — active but no completions in 14 days
+    val quietHabits = activeHabits.filter { habit ->
+        val hasRecentCompletion = recent.any { c ->
+            c.habitId == habit.id && !c.completionDate.isBefore(today.minusDays(13))
+        }
+        !hasRecentCompletion && habit.createdDate.isBefore(today.minusDays(7))
+    }
+    when (quietHabits.size) {
+        1 -> patterns.add(BehavioralPattern(
+            message = "${quietHabits[0].name} has been quiet lately — worth a revisit when ready.",
+            priority = 3
+        ))
+        in 2..Int.MAX_VALUE -> patterns.add(BehavioralPattern(
+            message = "A few habits have been quiet lately — no pressure, just a gentle note.",
+            priority = 3
+        ))
+    }
+
+    return patterns.sortedBy { it.priority }.take(3)
+}
+
+/**
+ * Compute goal health state from existing progress details and goal metadata.
+ * When a deadline exists: compares completion % to time-elapsed %.
+ * When no deadline: evaluates on completion % alone.
+ */
+private fun computeGoalHealth(
+    goal: GoalEntity,
+    progressDetails: GoalProgressDetails?,
+    today: LocalDate
+): GoalHealthState {
+    val percent = progressDetails?.overallPercent ?: 0
+    val deadline = goal.deadline
+
+    val momentum: GoalMomentum
+    val likelihood: String
+    val velocityLabel: String
+
+    if (deadline == null || deadline.isBefore(today)) {
+        // No active deadline — evaluate on completion % only
+        momentum = when {
+            percent >= 75 -> GoalMomentum.STRONG
+            percent >= 40 -> GoalMomentum.ON_TRACK
+            percent >= 15 -> GoalMomentum.SLOW
+            else          -> GoalMomentum.NEEDS_ATTENTION
+        }
+        likelihood = when (momentum) {
+            GoalMomentum.STRONG          -> "Looking strong"
+            GoalMomentum.ON_TRACK        -> "Good progress"
+            GoalMomentum.SLOW            -> "A bit more consistency helps"
+            GoalMomentum.NEEDS_ATTENTION -> "Ready when you are"
+        }
+        velocityLabel = when (momentum) {
+            GoalMomentum.STRONG          -> "Strong momentum"
+            GoalMomentum.ON_TRACK        -> "Steady pace"
+            GoalMomentum.SLOW            -> "Slow progress"
+            GoalMomentum.NEEDS_ATTENTION -> "Getting started"
+        }
+    } else {
+        // Active deadline — compare progress % to time elapsed %
+        val totalDays = ChronoUnit.DAYS.between(goal.startDate, deadline).toInt().coerceAtLeast(1)
+        val elapsedDays = ChronoUnit.DAYS.between(goal.startDate, today)
+            .coerceIn(0, totalDays.toLong()).toInt()
+        val timeElapsedPercent = (elapsedDays.toFloat() / totalDays.toFloat() * 100).toInt()
+        val daysRemaining = ChronoUnit.DAYS.between(today, deadline).coerceAtLeast(0).toInt()
+
+        momentum = when {
+            percent >= 100                              -> GoalMomentum.STRONG
+            daysRemaining <= 5 && percent < 80         -> GoalMomentum.NEEDS_ATTENTION
+            percent >= timeElapsedPercent + 10         -> GoalMomentum.STRONG
+            percent >= timeElapsedPercent - 15         -> GoalMomentum.ON_TRACK
+            percent < timeElapsedPercent - 30          -> GoalMomentum.NEEDS_ATTENTION
+            else                                       -> GoalMomentum.SLOW
+        }
+        likelihood = when (momentum) {
+            GoalMomentum.STRONG          -> "Likely to finish on time"
+            GoalMomentum.ON_TRACK        -> "On pace for the deadline"
+            GoalMomentum.SLOW            -> "Current pace may need a nudge"
+            GoalMomentum.NEEDS_ATTENTION -> "Deadline is approaching"
+        }
+        velocityLabel = when (momentum) {
+            GoalMomentum.STRONG          -> "Strong momentum"
+            GoalMomentum.ON_TRACK        -> "Steady pace"
+            GoalMomentum.SLOW            -> "Slow progress"
+            GoalMomentum.NEEDS_ATTENTION -> "Needs attention"
+        }
+    }
+
+    return GoalHealthState(
+        goalId = goal.goalId,
+        momentum = momentum,
+        completionLikelihood = likelihood,
+        velocityLabel = velocityLabel
+    )
+}
+
+/**
+ * Curated, human-toned reflection summary for the monthly analytics card.
+ * Chosen from a fixed set — never generated dynamically from templates.
+ * Tone: calm, editorial, personal. Not chatbot, not corporate.
+ */
+private fun buildReflectionSummary(
+    completionPercent: Int,
+    trend: Int,
+    totalCompleted: Int,
+    strongestHabit: String?
+): String {
+    if (totalCompleted == 0) return "A quieter start — patterns will emerge with time."
+    return when {
+        completionPercent >= 85 && trend > 5  -> "This month kept a strong, steady rhythm."
+        completionPercent >= 85               -> "Consistency stayed high — a solid foundation."
+        completionPercent >= 65 && trend > 10 -> "Momentum built steadily through the month."
+        completionPercent >= 65               -> "A balanced month — more days on than off."
+        trend > 15                            -> "Things picked up noticeably from last month."
+        trend < -15                           -> "A lighter month — sometimes that's exactly what's needed."
+        strongestHabit != null && completionPercent >= 40 ->
+            "$strongestHabit held the most consistent thread this month."
+        else -> "Small, steady steps — they add up more than they seem."
+    }
+}
+
+/**
+ * Merges base insights + behavioral patterns + monthly trend into a single
+ * semantically-deduplicated, priority-ordered list capped at 5 items.
+ *
+ * Deduplication is semantic (keyword-based), not exact-string — prevents
+ * two insights about the same weekday or concept appearing together.
+ */
+private fun buildPrioritizedInsights(
+    baseInsights: List<String>,
+    patterns: List<BehavioralPattern>,
+    monthly: MonthlyAnalytics?
+): List<String> {
+    data class Candidate(val message: String, val priority: Int)
+
+    val candidates = mutableListOf<Candidate>()
+
+    // Base weekly insights: priority 3+ (existing behavioral stats)
+    baseInsights.forEachIndexed { i, s -> candidates.add(Candidate(s, 3 + i)) }
+
+    // Behavioral patterns: their own priority (1–3)
+    patterns.forEach { p -> candidates.add(Candidate(p.message, p.priority)) }
+
+    // Monthly trend signal: priority 2 if meaningful shift (>= 10% delta)
+    monthly?.let { m ->
+        if (kotlin.math.abs(m.trendVsPreviousMonth) >= 10) {
+            val msg = if (m.trendVsPreviousMonth > 0)
+                "Consistency improved by ${m.trendVsPreviousMonth}% from last month."
+            else
+                "This month ran a little quieter than last — that's okay."
+            candidates.add(Candidate(msg, 2))
+        }
+    }
+
+    // Sort by priority, then deduplicate semantically
+    val sorted = candidates.sortedBy { it.priority }
+    val result = mutableListOf<String>()
+    val usedKeys = mutableSetOf<String>()
+
+    for (c in sorted) {
+        val key = semanticInsightKey(c.message)
+        if (key !in usedKeys) {
+            result.add(c.message)
+            usedKeys.add(key)
+            if (result.size >= 5) break
+        }
+    }
+
+    return result
+}
+
+/**
+ * Assigns a semantic category key to an insight message.
+ * Messages in the same category are treated as duplicates — only the highest-priority
+ * one is kept. This prevents two weekday observations, two streak mentions, etc.
+ */
+private fun semanticInsightKey(msg: String): String {
+    val lower = msg.lowercase()
+    // Weekday mentions — each weekday is its own category
+    listOf("monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday")
+        .forEach { day -> if (lower.contains(day)) return "weekday_$day" }
+    // Thematic categories
+    if (lower.contains("streak"))                               return "streak"
+    if (lower.contains("seven") && lower.contains("day"))       return "seven_day_rhythm"
+    if (lower.contains("week") && lower.contains("complet"))    return "weekly_completion"
+    if (lower.contains("perfect"))                              return "perfect_days"
+    if (lower.contains("improv") || lower.contains("quieter"))  return "monthly_trend"
+    if (lower.contains("found your way") || lower.contains("quieter stretch")) return "recovery"
+    if (lower.contains("focused") || lower.contains("shorter")) return "list_size"
+    if (lower.contains("quiet") && lower.contains("habit"))     return "quiet_habit"
+    if (lower.contains("consist") || lower.contains("rhythm"))  return "consistency"
+    // Fallback: use first 40 chars as loose key
+    return lower.take(40)
 }

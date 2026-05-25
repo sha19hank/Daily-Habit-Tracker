@@ -55,6 +55,8 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.mlue.app.viewmodel.HabitViewModel
 import com.mlue.app.viewmodel.DailyStats
+import com.mlue.app.viewmodel.GoalMomentum
+import com.mlue.app.ui.components.MonthlyAnalyticsCard
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -75,7 +77,6 @@ fun StatsScreen(
     val weeklySummary by viewModel.weeklySummary.collectAsState()
     val weeklyStats by viewModel.weeklyStats.collectAsState()
     val monthlyCount by viewModel.monthlyCount.collectAsState()
-    val insights by viewModel.insights.collectAsState()
     val focusMode by viewModel.focusModeEnabled.collectAsState()
     val activeGoal by viewModel.activeGoal.collectAsState()
     val goals by viewModel.goals.collectAsState()
@@ -94,6 +95,9 @@ fun StatsScreen(
     val completedGoals by remember(goals) { derivedStateOf { goals.filter { it.isCompleted } } }
     val consistencyScore by viewModel.consistencyScore.collectAsState()
     val haptics by viewModel.hapticsEnabled.collectAsState()
+    val goalHealthStates by viewModel.goalHealthStates.collectAsState()
+    val monthlyAnalytics by viewModel.monthlyAnalytics.collectAsState()
+    val prioritizedInsights by viewModel.prioritizedInsights.collectAsState()
     val haptic = LocalHapticFeedback.current
     val snackbarHostState = remember { androidx.compose.material3.SnackbarHostState() }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
@@ -253,6 +257,18 @@ fun StatsScreen(
                                         progress = { animatedProgress },
                                         modifier = Modifier.fillMaxWidth().height(6.dp)
                                     )
+
+                                    // Goal health chip — Sprint 3A
+                                    // Placed below progress bar: less disruptive, preserves card hierarchy.
+                                    val healthState = goalHealthStates[goal.goalId]
+                                    if (healthState != null) {
+                                        Spacer(modifier = Modifier.height(6.dp))
+                                        GoalHealthChip(
+                                            momentum = healthState.momentum,
+                                            label = healthState.velocityLabel,
+                                            isLightMode = isLightStats2
+                                        )
+                                    }
                                     
                                     if (overallPercent == 100 && !goal.isCompleted) {
                                         Button(
@@ -467,9 +483,21 @@ fun StatsScreen(
                         )
                     }
                 }
+
+                // ── Monthly Analytics — Sprint 3A ───────────────────────────────
+                // Card is self-contained: handles null and empty-data cases internally.
+                // Shown inside the else block (same gate as weekly stats) so it only
+                // appears when there is at least some data to reflect on.
+                monthlyAnalytics?.let { analytics ->
+                    Spacer(modifier = Modifier.height(8.dp))
+                    MonthlyAnalyticsCard(
+                        analytics = analytics,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
             }
 
-            if (!focusMode && insights.isNotEmpty()) {
+            if (!focusMode && prioritizedInsights.isNotEmpty()) {
                 Surface(
                     color = if (MaterialTheme.colorScheme.background.luminance() > 0.5f)
                         com.mlue.app.ui.theme.LightSurface
@@ -484,7 +512,7 @@ fun StatsScreen(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(text = "Insights", style = MaterialTheme.typography.titleMedium)
-                        insights.forEach { insight ->
+                        prioritizedInsights.forEach { insight ->
                             Row(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                                 verticalAlignment = Alignment.Top
@@ -737,5 +765,46 @@ private fun WeeklyBars(weeklyStats: List<DailyStats>) {
                 )
             }
         }
+    }
+}
+
+/**
+ * Subtle momentum chip displayed below a goal's progress bar.
+ *
+ * Color system (Sprint 3A design rules):
+ *  STRONG         → soft green tint (bg) + SuccessGreen (text)
+ *  ON_TRACK       → primary accent (bg LightSurfaceVariant) + primary (text)
+ *  SLOW           → neutral (onSurfaceVariant text, muted bg)
+ *  NEEDS_ATTENTION → soft amber tint (bg) + LightSecondaryAmber (text) — never red
+ */
+@Composable
+private fun GoalHealthChip(
+    momentum: GoalMomentum,
+    label: String,
+    isLightMode: Boolean
+) {
+    val textColor = when (momentum) {
+        GoalMomentum.STRONG          -> com.mlue.app.ui.theme.SuccessGreen
+        GoalMomentum.ON_TRACK        -> androidx.compose.material3.MaterialTheme.colorScheme.primary
+        GoalMomentum.SLOW            -> androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+        GoalMomentum.NEEDS_ATTENTION -> com.mlue.app.ui.theme.LightSecondaryAmber
+    }
+    val chipBg = when {
+        momentum == GoalMomentum.STRONG && isLightMode          -> androidx.compose.ui.graphics.Color(0xFFEBF6EF)
+        momentum == GoalMomentum.NEEDS_ATTENTION && isLightMode -> androidx.compose.ui.graphics.Color(0xFFFBF0E6)
+        isLightMode -> com.mlue.app.ui.theme.LightSurfaceVariant
+        else        -> com.mlue.app.ui.theme.DarkSurfaceVariant
+    }
+
+    androidx.compose.material3.Surface(
+        color = chipBg,
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(20.dp)
+    ) {
+        androidx.compose.material3.Text(
+            text = label,
+            style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+            color = textColor,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
+        )
     }
 }
