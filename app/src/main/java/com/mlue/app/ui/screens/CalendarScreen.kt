@@ -104,22 +104,24 @@ fun CalendarScreen(navController: NavController, viewModel: HabitViewModel) {
                 .padding(horizontal = 24.dp)
                 // 104dp bottom: dock(68) + dock-margin(20) + breathing(16)
                 .padding(bottom = 104.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .verticalScroll(rememberScrollState())
         ) {
+            // Zone 1: top breathing space — pushes stats row away from the TopAppBar
+            Spacer(modifier = Modifier.height(24.dp))
+
             CalendarHeaderStats(days = days, habits = habits)
 
-            Spacer(modifier = Modifier.height(8.dp))
+            // Zone 2: intentional gap between stats and calendar — airy, not tight
+            Spacer(modifier = Modifier.height(24.dp))
 
             val isLightMode = MaterialTheme.colorScheme.background.luminance() > 0.5f
-            
+
             Surface(
                 color = if (isLightMode) Color(0xFFFFFDF9) else MaterialTheme.colorScheme.surface,
                 shape = MaterialTheme.shapes.large,
                 border = if (isLightMode) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline) else null,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(top = 4.dp, bottom = 8.dp)
                     .then(
                         if (isLightMode) Modifier.shadow(
                             elevation = 4.dp,
@@ -164,7 +166,8 @@ fun CalendarScreen(navController: NavController, viewModel: HabitViewModel) {
                     }
                 }
             }
-            
+
+            // Zone 3: bottom clearance
             Spacer(modifier = Modifier.height(24.dp))
         }
     }
