@@ -1,6 +1,14 @@
 package com.mlue.app.ui.screens
 
 import android.app.TimePickerDialog
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -18,8 +26,8 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.automirrored.filled.Sort
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
@@ -56,6 +64,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.animation.AnimatedVisibility
@@ -71,6 +80,11 @@ import com.mlue.app.viewmodel.HabitViewModel
 import com.mlue.app.viewmodel.SortOption
 import java.time.LocalDate
 import java.time.LocalTime
+
+import androidx.compose.material3.HorizontalDivider
+import androidx.compose.ui.text.font.FontWeight
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 @Composable
 @OptIn(ExperimentalMaterial3Api::class)
@@ -104,6 +118,20 @@ fun HomeScreen(
             if (!focusMode) habits else habits.filter { viewModel.isScheduledToday(it) }
         }
     }
+
+    // Hydration guard — becomes true after first non-empty DB emission
+    // Avoids the empty-then-pop-in effect on cold launch
+    var habitsHaveLoaded by remember { mutableStateOf(false) }
+    LaunchedEffect(habits) {
+        if (habits.isNotEmpty()) habitsHaveLoaded = true
+    }
+    // Also mark loaded if DB returned and list is genuinely empty (no habits added yet)
+    // We detect this by waiting one frame past initial composition with a small delay
+    LaunchedEffect(Unit) {
+        kotlinx.coroutines.delay(600)
+        habitsHaveLoaded = true
+    }
+
     val scheduledTodayCount by remember(displayHabits, today) {
         derivedStateOf { displayHabits.count { !it.paused && viewModel.isScheduledToday(it) } }
     }
@@ -147,47 +175,103 @@ fun HomeScreen(
         }
     }
 
+    val dateLabel = remember(today) {
+        today.format(DateTimeFormatter.ofPattern("EEEE, d MMMM", Locale.ENGLISH))
+    }
+    val isLightHeader = androidx.compose.material3.MaterialTheme.colorScheme.background.luminance() > 0.5f
+
     // Hoisted ABOVE LazyColumn — pagerState inside a lazy item is unstable across recompositions
     val goalPagerState = rememberPagerState(pageCount = { carouselGoals.size })
 
     Scaffold(
         topBar = {
-            TopAppBar(
-                title = {
-                    Text(
-                        text = "Mlue",
-                        style = androidx.compose.material3.MaterialTheme.typography.titleLarge
-                    )
-                },
-                actions = {
-                    // Tighter, more intentional header rhythm
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        modifier = Modifier.padding(end = 4.dp)
-                    ) {
-                        FilterChip(
-                            selected = focusMode,
-                            onClick = { viewModel.setFocusMode(!focusMode) },
-                            label = { Text("Focus") }
-                        )
-                        // Tighter gap between chip and star
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Icon(
-                            imageVector = Icons.Filled.Star,
-                            contentDescription = "Tokens",
-                            modifier = Modifier.size(18.dp)
-                        )
-                        Text(
-                            text = tokenCount.toString(),
-                            style = androidx.compose.material3.MaterialTheme.typography.bodyMedium
-                        )
+            Column {
+                TopAppBar(
+                    colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
+                        containerColor = androidx.compose.material3.MaterialTheme.colorScheme.background
+                    ),
+                    title = {
+                        Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                            Text(
+                                text = "Mlue",
+                                style = androidx.compose.material3.MaterialTheme.typography.titleLarge.copy(
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = (-0.5).sp
+                                ),
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.onBackground
+                            )
+                            Text(
+                                text = dateLabel,
+                                style = androidx.compose.material3.MaterialTheme.typography.labelSmall,
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    },
+                    actions = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            modifier = Modifier.padding(end = 12.dp)
+                        ) {
+                            FilterChip(
+                                selected = focusMode,
+                                onClick = { viewModel.setFocusMode(!focusMode) },
+                                label = {
+                                    Text(
+                                        "Focus",
+                                        style = androidx.compose.material3.MaterialTheme.typography.labelSmall
+                                    )
+                                }
+                            )
+                            // Momentum dot — replaces bare star icon
+                            // Reads as: quiet energy indicator, not gamified currency
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .background(
+                                            color = androidx.compose.material3.MaterialTheme.colorScheme.primary,
+                                            shape = CircleShape
+                                        )
+                                )
+                                Text(
+                                    text = tokenCount.toString(),
+                                    style = androidx.compose.material3.MaterialTheme.typography.labelMedium,
+                                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                        }
                     }
-                }
-            )
+                )
+                // Subtle editorial divider — separates header from content
+                HorizontalDivider(
+                    thickness = 0.5.dp,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.outline.copy(alpha = 0.35f)
+                )
+            }
         },
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
+        AnimatedContent(
+            targetState = habitsHaveLoaded,
+            transitionSpec = {
+                fadeIn(animationSpec = com.mlue.app.ui.theme.AppMotion.floatTween(com.mlue.app.ui.theme.AppMotion.durationMedium)) togetherWith
+                fadeOut(animationSpec = com.mlue.app.ui.theme.AppMotion.floatTween(com.mlue.app.ui.theme.AppMotion.durationShort))
+            },
+            label = "hydration"
+        ) { loaded ->
+            if (!loaded) {
+                // Skeleton placeholder — prevents empty-then-pop-in on cold launch
+                ShimmerHabitList(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .padding(padding)
+                        .padding(horizontal = 24.dp, vertical = 24.dp)
+                )
+            } else {
         Box(modifier = Modifier.fillMaxSize().padding(padding)) {
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
@@ -707,9 +791,50 @@ fun HomeScreen(
                     }
                 }
             }
+            }
+        }
         }
     }
 
+}
+
+@Composable
+private fun ShimmerHabitList(modifier: Modifier = Modifier) {
+    val isLight = androidx.compose.material3.MaterialTheme.colorScheme.background.luminance() > 0.5f
+    val shimmerColor = if (isLight)
+        com.mlue.app.ui.theme.LightSurfaceVariant
+    else
+        com.mlue.app.ui.theme.DarkSurface
+
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // Skeleton progress card
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(118.dp)
+                .background(shimmerColor, androidx.compose.material3.MaterialTheme.shapes.extraLarge)
+        )
+        // Skeleton habit rows
+        repeat(4) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(80.dp)
+                    .background(shimmerColor, androidx.compose.material3.MaterialTheme.shapes.medium)
+                    .then(
+                        if (isLight) Modifier.then(
+                            Modifier.background(
+                                shimmerColor.copy(alpha = 0.7f - it * 0.1f),
+                                androidx.compose.material3.MaterialTheme.shapes.medium
+                            )
+                        ) else Modifier
+                    )
+            )
+        }
+    }
 }
 
 private val reflectionLines = listOf(

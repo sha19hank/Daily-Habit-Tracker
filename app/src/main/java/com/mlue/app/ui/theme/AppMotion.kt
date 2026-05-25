@@ -9,7 +9,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntOffset
 
 /**
- * Centralized motion constants for the Daily Habit Tracker.
+ * Centralized motion constants for Mlue.
  *
  * ALL animation specs across the app should reference this object.
  * Do NOT define inline tweens or springs elsewhere after Phase 5.

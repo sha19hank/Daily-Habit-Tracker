@@ -89,7 +89,7 @@ private val AppTypography = Typography(
 )
 
 @Composable
-fun DailyHabitTrackerTheme(
+fun MlueTheme(
     darkTheme: Boolean,
     content: @Composable () -> Unit
 ) {

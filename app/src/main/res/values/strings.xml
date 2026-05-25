@@ -1,7 +1,7 @@
 <resources>
-    <string name="app_name">Daily Habit Tracker</string>
+    <string name="app_name">Mlue</string>
     <string name="admob_app_id">ca-app-pub-3940256099942544~3347511713</string>
     <string name="admob_banner_id">ca-app-pub-3940256099942544/6300978111</string>
     <string name="admob_rewarded_id">ca-app-pub-3940256099942544/5224354917</string>
-    <string name="reminder_body">Time to complete your habit.</string>
+    <string name="reminder_body">Time to check in on your habits.</string>
 </resources>

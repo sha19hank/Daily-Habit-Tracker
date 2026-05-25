@@ -109,6 +109,8 @@ fun CalendarScreen(navController: NavController, viewModel: HabitViewModel) {
         ) {
             CalendarHeaderStats(days = days, habits = habits)
 
+            Spacer(modifier = Modifier.height(8.dp))
+
             val isLightMode = MaterialTheme.colorScheme.background.luminance() > 0.5f
             
             Surface(
@@ -117,7 +119,7 @@ fun CalendarScreen(navController: NavController, viewModel: HabitViewModel) {
                 border = if (isLightMode) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline) else null,
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 8.dp)
+                    .padding(top = 4.dp, bottom = 8.dp)
                     .then(
                         if (isLightMode) Modifier.shadow(
                             elevation = 4.dp,

@@ -40,7 +40,7 @@ import com.mlue.app.ui.screens.HomeScreen
 import com.mlue.app.ui.screens.JournalScreen
 import com.mlue.app.ui.screens.SettingsScreen
 import com.mlue.app.ui.screens.StatsScreen
-import com.mlue.app.ui.theme.DailyHabitTrackerTheme
+import com.mlue.app.ui.theme.MlueTheme
 import com.mlue.app.viewmodel.HabitViewModel
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CheckCircle
@@ -75,7 +75,7 @@ class MainActivity : ComponentActivity() {
             val cachedTheme = viewModel.getCachedTheme()
             val darkMode by viewModel.darkModeEnabled.collectAsState(initial = cachedTheme ?: systemDark)
             
-            DailyHabitTrackerTheme(darkTheme = darkMode) {
+            MlueTheme(darkTheme = darkMode) {
                 AppNavHost(viewModel = viewModel)
             }
         }
