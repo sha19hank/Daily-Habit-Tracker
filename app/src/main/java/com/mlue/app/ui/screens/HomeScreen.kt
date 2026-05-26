@@ -103,6 +103,8 @@ fun HomeScreen(
     val darkMode by viewModel.darkModeEnabled.collectAsState(initial = cachedTheme ?: systemDark)
     val goals by viewModel.goals.collectAsState()
     val goalProgress by viewModel.goalProgress.collectAsState()
+    val habitMomentums by viewModel.habitMomentums.collectAsState()
+    val adaptiveFocusedHabits by viewModel.adaptiveFocusedHabits.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val context = LocalContext.current
     val listState = rememberLazyListState()
@@ -112,9 +114,14 @@ fun HomeScreen(
     val haptic = LocalHapticFeedback.current
     var quickNote by rememberSaveable { mutableStateOf("") }
 
-    val displayHabits by remember(habits, focusMode) {
+    // adaptiveFocusedHabits handles both the filter-to-today AND the intelligent sort:
+    // incomplete habits first, then by streak. When focus mode is OFF, it mirrors
+    // the regular habits list (user's chosen sort order preserved).
+    // In focus mode the ViewModel-level flow is used directly; non-focus uses the
+    // user's sort-aware habits flow via the legacy displayHabits derivation.
+    val displayHabits by remember(habits, focusMode, adaptiveFocusedHabits) {
         derivedStateOf {
-            if (!focusMode) habits else habits.filter { viewModel.isScheduledToday(it) }
+            if (focusMode) adaptiveFocusedHabits else habits
         }
     }
 
@@ -638,6 +645,8 @@ fun HomeScreen(
                     stepSupported = stepState.supported,
                     stepsToday = stepState.stepsToday,
                     goalTitle = goalTitle,
+                    momentum = habitMomentums[habit.id],
+                    isFocusMode = focusMode,
                     onEdit = {
                         navController.navigate("add?habitId=${habit.id}") {
                             launchSingleTop = true
@@ -718,7 +727,14 @@ fun HomeScreen(
                                 value = quickNote,
                                 onValueChange = { quickNote = it },
                                 modifier = Modifier.fillMaxWidth(),
-                                placeholder = { Text("What stood out today?") },
+                                placeholder = {
+                                    // Day-seeded rotating prompt — same day feels stable,
+                                    // different day feels alive. Never random — deterministic.
+                                    val prompt = remember(today) {
+                                        journalPrompts[today.dayOfYear % journalPrompts.size]
+                                    }
+                                    Text(prompt)
+                                },
                                 minLines = 3
                             )
                             androidx.compose.foundation.layout.Row(
@@ -840,4 +856,22 @@ private val reflectionLines = listOf(
     "quiet consistency matters.",
     "showing up still counts.",
     "momentum starts quietly."
+)
+
+/**
+ * Rotating daily journal prompts — day-seeded so the same prompt shows all day
+ * but shifts the next. Short, open-ended, reflective. Never therapy language.
+ * Sprint 3B: Journal Intelligence (Task 7)
+ */
+private val journalPrompts = listOf(
+    "What felt easier today?",
+    "What helped you stay on track?",
+    "What would you do differently tomorrow?",
+    "What are you quietly proud of today?",
+    "What interrupted your rhythm today?",
+    "What small thing made today better?",
+    "What did you notice about your energy?",
+    "What could you let go of tonight?",
+    "What showed up for you today?",
+    "What would a lighter tomorrow look like?"
 )

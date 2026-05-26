@@ -219,17 +219,49 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
+    // ── Sprint 3B: Adaptive Intelligence Layer ────────────────────────────────
+    // Additive flows — no existing flow modified, no DB migration.
+    // All new flows share completionsFlow/habitsFlow subscriptions.
+
+    /** Per-habit momentum states — used for the 5dp card dot indicator. */
+    val habitMomentums: StateFlow<Map<Long, HabitMomentum>> = combine(
+        completionsFlow,
+        habitsFlow
+    ) { completions, habits ->
+        val today = LocalDate.now()
+        habits.associate { habit -> habit.id to computeMomentum(habit, completions, today) }
+    }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
+
+    /**
+     * Rhythm observations — soft weekday/recovery/load patterns.
+     * Null when data is insufficient (< 10 completions, < 14 days history).
+     * Max 2 observations per cycle.
+     */
+    val rhythmInsights: StateFlow<RhythmInsight?> = combine(
+        completionsFlow,
+        habitsFlow
+    ) { completions, habits ->
+        detectRhythm(completions, habits, LocalDate.now())
+    }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
+
     /**
      * Prioritized, semantically-deduplicated insights feed.
-     * Merges base weekly insights + behavioral patterns + monthly trend signal.
-     * Hard cap: 5 items. Existing [insights] StateFlow is preserved unchanged.
+     * Merges base weekly insights + behavioral patterns + monthly trend + rhythm.
+     * Hard cap: 5 items. High-priority insights (priority ≤ 2) are sticky.
+     * Lower-priority insights rotate daily via date-seeding.
+     * Existing [insights] StateFlow is preserved unchanged.
      */
     val prioritizedInsights: StateFlow<List<String>> = combine(
         insights,
         behavioralPatterns,
-        monthlyAnalytics
-    ) { baseInsights, patterns, monthly ->
-        buildPrioritizedInsights(baseInsights, patterns, monthly)
+        monthlyAnalytics,
+        rhythmInsights
+    ) { baseInsights, patterns, monthly, rhythm ->
+        buildPrioritizedInsights(baseInsights, patterns, monthly, rhythm)
     }
         .distinctUntilChanged()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -251,6 +283,33 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
 
     val focusModeEnabled: StateFlow<Boolean> = settings.focusModeEnabled()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    /**
+     * Behavior-aware sorted list for focus mode.
+     * When focus OFF: same as [habits] (user's chosen sort order preserved).
+     * When focus ON: filters to scheduled-today only, sorted incomplete-first then by streak.
+     * Declared after focusModeEnabled to satisfy Kotlin property init ordering.
+     */
+    val adaptiveFocusedHabits: StateFlow<List<HabitEntity>> = combine(
+        habitsFlow,
+        focusModeEnabled
+    ) { allHabits, focusMode ->
+        if (!focusMode) return@combine allHabits
+        val today = LocalDate.now()
+        allHabits
+            .filter { habit ->
+                !habit.paused &&
+                (habit.scheduledDays.isEmpty() || habit.scheduledDays.contains(today.dayOfWeek.value))
+            }
+            .sortedWith(
+                compareBy<HabitEntity>(
+                    { it.lastCompletedDate == today },
+                    { -it.currentStreak }
+                )
+            )
+    }
+        .distinctUntilChanged()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     val hapticsEnabled: StateFlow<Boolean> = settings.hapticsEnabled()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), true)
@@ -923,6 +982,52 @@ private fun detectBehavioralPatterns(
         ))
     }
 
+    // ── Sprint 3B: Energy / Load patterns ─────────────────────────────────────
+    // Phrased as soft possibility — never as advice, never implying the app "knows" the user.
+
+    // Pattern 6: Rapid habit addition — 3+ habits created in last 7 days
+    // Cross-reference with recent completion rate to see if load correlates with dip.
+    val newHabitsThisWeek = activeHabits.count { habit ->
+        !habit.createdDate.isBefore(today.minusDays(6))
+    }
+    if (newHabitsThisWeek >= 3) {
+        val last7Completed = recent.count { !it.completionDate.isBefore(today.minusDays(6)) }
+        val last7Scheduled = activeHabits.sumOf { h ->
+            habitScheduledInRange(h, today.minusDays(6), today)
+        }
+        val recentRate = if (last7Scheduled > 0) last7Completed.toFloat() / last7Scheduled else 1f
+        if (recentRate < 0.55f) {
+            patterns.add(BehavioralPattern(
+                message = "Adding several habits at once can sometimes spread focus — smaller steps tend to hold steadier.",
+                priority = 3
+            ))
+        }
+    }
+
+    // Pattern 7: Steep consistency drop — this 7-day window significantly worse than prior 7
+    if (activeHabits.isNotEmpty()) {
+        val last7Completed = recent.count { !it.completionDate.isBefore(today.minusDays(6)) }
+        val prior7Completed = recent.count {
+            it.completionDate.isBefore(today.minusDays(6)) &&
+            !it.completionDate.isBefore(today.minusDays(13))
+        }
+        val last7Scheduled = activeHabits.sumOf { h ->
+            habitScheduledInRange(h, today.minusDays(6), today)
+        }
+        val prior7Scheduled = activeHabits.sumOf { h ->
+            habitScheduledInRange(h, today.minusDays(13), today.minusDays(7))
+        }
+        val recentRate = if (last7Scheduled > 0) last7Completed.toFloat() / last7Scheduled else 1f
+        val priorRate = if (prior7Scheduled > 0) prior7Completed.toFloat() / prior7Scheduled else 1f
+        if (priorRate - recentRate >= 0.3f && priorRate >= 0.5f) {
+            // Only fire if prior period was reasonably consistent (not recovering from a gap)
+            patterns.add(BehavioralPattern(
+                message = "Routines seem to flow more easily with a focused, smaller list.",
+                priority = 3
+            ))
+        }
+    }
+
     return patterns.sortedBy { it.priority }.take(3)
 }
 
@@ -1002,9 +1107,9 @@ private fun computeGoalHealth(
 }
 
 /**
- * Curated, human-toned reflection summary for the monthly analytics card.
- * Chosen from a fixed set — never generated dynamically from templates.
- * Tone: calm, editorial, personal. Not chatbot, not corporate.
+ * Upgraded monthly reflection summary with category-aware phrasing and deeper emotional nuance.
+ * Category detection is lightweight — keyword matching on habit names, not taxonomy.
+ * Tone: calm, editorial, observational. Never chatbot, never corporate.
  */
 private fun buildReflectionSummary(
     completionPercent: Int,
@@ -1013,30 +1118,77 @@ private fun buildReflectionSummary(
     strongestHabit: String?
 ): String {
     if (totalCompleted == 0) return "A quieter start — patterns will emerge with time."
+
+    // Soft category detection from strongest habit name
+    val habitCategory = strongestHabit?.lowercase()?.let { name ->
+        when {
+            name.containsAny("walk", "run", "gym", "exercise", "yoga", "stretch", "workout") -> "health"
+            name.containsAny("meditat", "breath", "journal", "gratitude", "reflect") -> "mindfulness"
+            name.containsAny("read", "learn", "study", "practice", "skill") -> "growth"
+            name.containsAny("sleep", "wake", "morning", "evening", "night") -> "rhythm"
+            else -> null
+        }
+    }
+
     return when {
-        completionPercent >= 85 && trend > 5  -> "This month kept a strong, steady rhythm."
-        completionPercent >= 85               -> "Consistency stayed high — a solid foundation."
-        completionPercent >= 65 && trend > 10 -> "Momentum built steadily through the month."
-        completionPercent >= 65               -> "A balanced month — more days on than off."
-        trend > 15                            -> "Things picked up noticeably from last month."
-        trend < -15                           -> "A lighter month — sometimes that's exactly what's needed."
+        // High completion + improving trend
+        completionPercent >= 85 && trend > 5 -> when (habitCategory) {
+            "health"      -> "Health routines stayed especially steady this month."
+            "mindfulness" -> "A calm, consistent month — the quieter habits held firm."
+            "growth"      -> "Learning routines kept a strong rhythm through the month."
+            else          -> "This month kept a strong, steady rhythm."
+        }
+
+        // High completion, stable
+        completionPercent >= 85 -> when (habitCategory) {
+            "health"  -> "Physical routines stayed consistent — that foundation is real."
+            "rhythm"  -> "Daily rhythm stayed grounded — a quiet kind of stability."
+            else      -> "Consistency stayed high — a solid foundation."
+        }
+
+        // Good completion + improving
+        completionPercent >= 65 && trend > 10 ->
+            "Consistency recovered steadily after a slower start."
+
+        // Good completion, stable
+        completionPercent >= 65 -> when (habitCategory) {
+            "mindfulness" -> "A grounded month — more presence than absence."
+            else          -> "A balanced month — more days on than off."
+        }
+
+        // Notable upward trend
+        trend > 15 -> "Things picked up noticeably from last month — momentum is building."
+
+        // Decline — framed gently, never as failure
+        trend < -15 -> "A lighter month — sometimes stepping back creates space to return stronger."
+
+        // Named habit anchor
         strongestHabit != null && completionPercent >= 40 ->
-            "$strongestHabit held the most consistent thread this month."
+            "$strongestHabit held the most consistent thread through the month."
+
+        // Gentle default
         else -> "Small, steady steps — they add up more than they seem."
     }
 }
 
+/** Extension helper for multi-keyword matching — keeps when-branches readable. */
+private fun String.containsAny(vararg keywords: String) = keywords.any { contains(it) }
+
 /**
- * Merges base insights + behavioral patterns + monthly trend into a single
- * semantically-deduplicated, priority-ordered list capped at 5 items.
+ * Merges base insights + behavioral patterns + monthly trend + rhythm observations
+ * into a single semantically-deduplicated, priority-ordered list capped at 5 items.
  *
- * Deduplication is semantic (keyword-based), not exact-string — prevents
- * two insights about the same weekday or concept appearing together.
+ * Stickiness rule (Sprint 3B):
+ *  - High-priority candidates (priority ≤ 2) are always included first.
+ *  - Lower-priority candidates (priority ≥ 3) rotate daily using today's epoch day as seed.
+ *  This prevents important observations from being buried, while keeping the lower feed
+ *  from feeling repetitive across days without feeling random.
  */
 private fun buildPrioritizedInsights(
     baseInsights: List<String>,
     patterns: List<BehavioralPattern>,
-    monthly: MonthlyAnalytics?
+    monthly: MonthlyAnalytics?,
+    rhythm: RhythmInsight?
 ): List<String> {
     data class Candidate(val message: String, val priority: Int)
 
@@ -1059,12 +1211,30 @@ private fun buildPrioritizedInsights(
         }
     }
 
-    // Sort by priority, then deduplicate semantically
+    // Rhythm observations: priority 2 (observational, high quality)
+    rhythm?.observations?.forEach { obs ->
+        candidates.add(Candidate(obs, 2))
+    }
+
     val sorted = candidates.sortedBy { it.priority }
+
+    // Stickiness: high-priority items (≤ 2) always lead and are not rotated.
+    val highPriority = sorted.filter { it.priority <= 2 }
+    val lowPriority = sorted.filter { it.priority > 2 }
+
+    // Date-seed rotation on low-priority pool — same day = same order (feels stable),
+    // different day = gently shifted (feels alive). Not random — deterministic.
+    val rotatedLow = if (lowPriority.size > 1) {
+        val offset = (LocalDate.now().toEpochDay() % lowPriority.size).toInt()
+        lowPriority.drop(offset) + lowPriority.take(offset)
+    } else lowPriority
+
+    val combined = highPriority + rotatedLow
+
+    // Semantic deduplication — prevents two insights about the same theme
     val result = mutableListOf<String>()
     val usedKeys = mutableSetOf<String>()
-
-    for (c in sorted) {
+    for (c in combined) {
         val key = semanticInsightKey(c.message)
         if (key !in usedKeys) {
             result.add(c.message)

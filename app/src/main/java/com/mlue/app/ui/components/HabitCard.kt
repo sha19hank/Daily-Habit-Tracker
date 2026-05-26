@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.background
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsPressedAsState
@@ -48,6 +49,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.mlue.app.data.HabitEntity
+import com.mlue.app.viewmodel.HabitMomentum
 import java.time.LocalDate
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -61,6 +63,8 @@ fun HabitCard(
     stepsToday: Int,
     modifier: Modifier = Modifier,
     goalTitle: String? = null,
+    momentum: HabitMomentum? = null,
+    isFocusMode: Boolean = false,
     onEdit: () -> Unit,
     onToggleCompletion: () -> Unit,
     onDelete: () -> Unit,
@@ -71,7 +75,9 @@ fun HabitCard(
 ) {
     val isCompletedToday = habit.lastCompletedDate == today
     val isPaused = habit.paused
+    // Focus mode disables expansion — reinforces calm simplification
     var expanded by remember { mutableStateOf(false) }
+    val canExpand = !isFocusMode
     var showDeleteDialog by remember { mutableStateOf(false) }
 
     val isLightMode = MaterialTheme.colorScheme.background.luminance() > 0.5f
@@ -147,7 +153,7 @@ fun HabitCard(
             .clickable(
                 interactionSource = interactionSource,
                 indication = androidx.compose.material.ripple.rememberRipple(),
-                onClick = { expanded = !expanded }
+                onClick = { if (canExpand) expanded = !expanded }
             ),
         shape = androidx.compose.foundation.shape.RoundedCornerShape(26.dp),
         colors = CardDefaults.cardColors(containerColor = containerColor),
@@ -180,14 +186,19 @@ fun HabitCard(
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                        Spacer(modifier = Modifier.height(6.dp))
-                        Text(
-                            text = "Streak: ${habit.currentStreak}",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.graphicsLayer { alpha = metadataAlpha }
-                        )
-                        if (goalTitle != null) {
+                        // Focus mode: hide streak label when zero (reduces noise)
+                        val showStreak = !isFocusMode || habit.currentStreak > 0
+                        if (showStreak) {
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = "Streak: ${habit.currentStreak}",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.graphicsLayer { alpha = metadataAlpha }
+                            )
+                        }
+                        // Focus mode: goal chip hidden — reduces informational density
+                        if (goalTitle != null && !isFocusMode) {
                             Spacer(modifier = Modifier.height(4.dp))
                             androidx.compose.material3.SuggestionChip(
                                 onClick = { },
@@ -210,7 +221,35 @@ fun HabitCard(
                             )
                         }
                     }
-                    
+
+                    // ── Momentum dot ───────────────────────────────────────────
+                    // 5×5dp dot — quiet enough to be noticed over time, not immediately obvious.
+                    // STEADY = no dot (default state, no visual noise).
+                    // No pulsing ring — Mlue's visual language depends on quiet discovery.
+                    val momentumColor: Color? = when (momentum) {
+                        HabitMomentum.STRONG    -> MaterialTheme.colorScheme.primary
+                        HabitMomentum.BUILDING  -> MaterialTheme.colorScheme.primaryContainer
+                        HabitMomentum.RECOVERING -> MaterialTheme.colorScheme.tertiary
+                        HabitMomentum.DORMANT   -> MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.3f)
+                        HabitMomentum.STEADY, null -> null
+                    }
+                    if (momentumColor != null) {
+                        val animatedDotColor by animateColorAsState(
+                            targetValue = momentumColor,
+                            animationSpec = AppMotion.colorTween(),
+                            label = "momentumDot"
+                        )
+                        Box(
+                            modifier = Modifier
+                                .padding(end = 6.dp)
+                                .size(5.dp)
+                                .background(
+                                    color = animatedDotColor,
+                                    shape = androidx.compose.foundation.shape.CircleShape
+                                )
+                        )
+                    }
+
                     Box(
                         modifier = Modifier.graphicsLayer {
                             scaleX = checkboxScale

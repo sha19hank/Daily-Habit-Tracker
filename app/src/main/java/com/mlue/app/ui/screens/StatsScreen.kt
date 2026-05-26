@@ -98,6 +98,7 @@ fun StatsScreen(
     val goalHealthStates by viewModel.goalHealthStates.collectAsState()
     val monthlyAnalytics by viewModel.monthlyAnalytics.collectAsState()
     val prioritizedInsights by viewModel.prioritizedInsights.collectAsState()
+    val rhythmInsights by viewModel.rhythmInsights.collectAsState()
     val haptic = LocalHapticFeedback.current
     val snackbarHostState = remember { androidx.compose.material3.SnackbarHostState() }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
@@ -494,6 +495,18 @@ fun StatsScreen(
                         analytics = analytics,
                         modifier = Modifier.fillMaxWidth()
                     )
+                    // ── Rhythm observation (Sprint 3B) ─────────────────────────────────
+                    // Plain text only — no cards, chips, separators, or icon clutter.
+                    // Max 1 observation. Null when data is insufficient.
+                    rhythmInsights?.observations?.firstOrNull()?.let { obs ->
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            text = obs,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 4.dp)
+                        )
+                    }
                 }
             }
 
