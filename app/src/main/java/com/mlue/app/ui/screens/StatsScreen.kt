@@ -37,6 +37,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.animation.core.animateFloatAsState
@@ -109,8 +110,11 @@ fun StatsScreen(
 
     val bringIntoViewRequester = remember { BringIntoViewRequester() }
 
-    LaunchedEffect(highlightGoalId, goals) {
-        if (highlightGoalId != null && goals.any { it.goalId == highlightGoalId }) {
+    // Transient highlight state — consumes the route argument once per navigation intent
+    var activeHighlightId by remember { mutableStateOf(highlightGoalId) }
+
+    LaunchedEffect(activeHighlightId, goals) {
+        if (activeHighlightId != null && goals.any { it.goalId == activeHighlightId }) {
             kotlinx.coroutines.delay(300)
             bringIntoViewRequester.bringIntoView()
         }
@@ -142,6 +146,16 @@ fun StatsScreen(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(padding)
+                // Clear highlight on ANY manual user interaction (scroll/tap/swipe) to ensure the 
+                // highlight behaves strictly as an ephemeral navigation focus, not persistent state.
+                .pointerInput(Unit) {
+                    awaitPointerEventScope {
+                        while (true) {
+                            awaitPointerEvent(androidx.compose.ui.input.pointer.PointerEventPass.Initial)
+                            if (activeHighlightId != null) activeHighlightId = null
+                        }
+                    }
+                }
                 .verticalScroll(scrollState)
                 .navigationBarsPadding()
                 .padding(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 120.dp),
@@ -198,7 +212,7 @@ fun StatsScreen(
                         }
                     } else {
                         activeGoals.forEach { goal ->
-                            val isHighlighted = highlightGoalId == goal.goalId
+                            val isHighlighted = activeHighlightId == goal.goalId
                             val isLightStats2 = MaterialTheme.colorScheme.background.luminance() > 0.5f
                             Surface(
                                 // Highlighted: primaryContainer; normal: static surface token

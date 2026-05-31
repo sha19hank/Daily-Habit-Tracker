@@ -121,24 +121,10 @@ fun HomeScreen(
     val haptic = LocalHapticFeedback.current
     var quickNote by rememberSaveable { mutableStateOf("") }
 
-    // Soft completion sound — ToneGenerator, no asset files required.
-    // TONE_PROP_ACK produces a warm, crisp confirmation click.
-    // Volume at 60% — audible but not arcade-like.
-    val playCompletionSound: () -> Unit = remember(sounds) {
-        {
-            if (sounds) {
-                try {
-                    val tg = ToneGenerator(AudioManager.STREAM_MUSIC, 60)
-                    tg.startTone(ToneGenerator.TONE_PROP_ACK, 100) // 100ms
-                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(
-                        { tg.release() }, 150
-                    )
-                } catch (_: Exception) {
-                    // Silently ignore: ToneGenerator unavailable on some low-memory devices
-                }
-            }
-        }
-    }
+    val interactionFeedback = com.mlue.app.ui.components.rememberHabitInteractionFeedback(
+        soundsEnabled = sounds,
+        hapticsEnabled = haptics
+    )
 
     // adaptiveFocusedHabits handles both the filter-to-today AND the intelligent sort:
     // incomplete habits first, then by streak. When focus mode is OFF, it mirrors
@@ -777,11 +763,11 @@ fun HomeScreen(
                     },
                     onToggleCompletion = {
                         val wasCompleted = habit.lastCompletedDate == today
-                        if (haptics) {
-                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        // Sound and haptics are handled exclusively by the new reliable centralized feedback system
+                        // which guarantees native OEM execution, debounce protection, and 0ms main thread blocking.
+                        if (!wasCompleted) {
+                            interactionFeedback.triggerCompletionFeedback()
                         }
-                        // Sound only fires on completion, not uncheck — keeps feedback intentional
-                        if (!wasCompleted) playCompletionSound()
                         viewModel.toggleHabitCompletion(habit)
                     },
                     onDelete = {

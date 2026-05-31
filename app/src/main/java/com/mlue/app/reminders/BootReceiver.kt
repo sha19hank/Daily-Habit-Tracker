@@ -15,7 +15,8 @@ class BootReceiver : BroadcastReceiver() {
         val action = intent.action ?: return
         if (action != Intent.ACTION_BOOT_COMPLETED &&
             action != "android.intent.action.QUICKBOOT_POWERON" &&
-            action != "com.htc.intent.action.QUICKBOOT_POWERON"
+            action != "com.htc.intent.action.QUICKBOOT_POWERON" &&
+            action != Intent.ACTION_MY_PACKAGE_REPLACED
         ) return
         
         android.util.Log.d("MlueStartup", "BootReceiver: onReceive action=$action")
@@ -26,7 +27,13 @@ class BootReceiver : BroadcastReceiver() {
             try {
                 // Restore ALL habit reminders from Room — single lightweight pass
                 val dao = HabitDatabase.build(context).habitDao()
-                ReminderScheduler(context, dao).scheduleAll()
+                val scheduler = ReminderScheduler(context, dao)
+                
+                // Clear any stale/ghost alarms first
+                scheduler.cancelAll()
+                // Reschedule active reminders
+                scheduler.scheduleAll()
+                
                 android.util.Log.d("MlueStartup", "BootReceiver: scheduleAll completed")
             } catch (e: Exception) {
                 android.util.Log.e("MlueStartup", "BootReceiver: Caught exception during execution", e)

@@ -7,6 +7,9 @@
          Without this, exact alarms silently fail on API 31+.
          App gracefully falls back to setAndAllowWhileIdle if not granted. -->
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
+    
+    <!-- Required for Android 14+ to grant exact alarm scheduling out-of-the-box for calendar/alarm apps -->
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
 
     <application
         android:name=".DailyHabitTrackerApp"
@@ -35,7 +38,8 @@
         </receiver>
 
         <!-- BootReceiver: MUST be exported=true to receive system broadcasts.
-             Also handles QUICKBOOT_POWERON for Xiaomi/HTC OEM compatibility. -->
+             Also handles QUICKBOOT_POWERON for Xiaomi/HTC OEM compatibility.
+             MY_PACKAGE_REPLACED restores alarms after the app is updated. -->
         <receiver
             android:name=".reminders.BootReceiver"
             android:exported="true">
@@ -43,6 +47,7 @@
                 <action android:name="android.intent.action.BOOT_COMPLETED" />
                 <action android:name="android.intent.action.QUICKBOOT_POWERON" />
                 <action android:name="com.htc.intent.action.QUICKBOOT_POWERON" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
             </intent-filter>
         </receiver>
 

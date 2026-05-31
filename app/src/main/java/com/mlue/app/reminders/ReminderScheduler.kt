@@ -59,12 +59,15 @@ class ReminderScheduler(
         }
         val pendingIntent = PendingIntent.getBroadcast(
             context,
-            // Each habit gets a unique request code — prevents same-time alarms overwriting each other
+            // Request code is habit.id.toInt(). Since habit ID is a unique Long and reminders are exactly 1 per habit,
+            // this guarantees a stable and unique ID that cleanly replaces any old instances via FLAG_UPDATE_CURRENT,
+            // entirely eliminating "ghost alarms" from time edits without hash collisions.
             habit.id.toInt(),
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
+        android.util.Log.d("MlueReminder", "Scheduling habitId=${habit.id} target=$nextTime ms=$triggerAtMillis")
         setAlarm(triggerAtMillis, pendingIntent)
     }
 
@@ -101,6 +104,7 @@ class ReminderScheduler(
         }
 
         if (canScheduleExact) {
+            android.util.Log.d("MlueReminder", "Using exact scheduling (setExactAndAllowWhileIdle)")
             alarmManager.setExactAndAllowWhileIdle(
                 AlarmManager.RTC_WAKEUP,
                 triggerAtMillis,
@@ -108,6 +112,7 @@ class ReminderScheduler(
             )
         } else {
             // Graceful fallback: inexact but still Doze-exempt
+            android.util.Log.w("MlueReminder", "Fallback to inexact scheduling (setAndAllowWhileIdle). Exact permission denied/unavailable.")
             alarmManager.setAndAllowWhileIdle(
                 AlarmManager.RTC_WAKEUP,
                 triggerAtMillis,
@@ -125,8 +130,11 @@ class ReminderScheduler(
         val scheduledDays = habit.scheduledDays
         var candidate = LocalDateTime.of(today, time)
 
-        // If today's slot has already passed, start searching from tomorrow
-        if (candidate.isBefore(LocalDateTime.now())) {
+        // Defensive guard: if today's slot has already passed, start searching from tomorrow.
+        // We use a 10-second tolerance (plusSeconds(10)) against LocalDateTime.now() to ensure that 
+        // if an alarm fires perfectly on time (or milliseconds early), we don't accidentally evaluate
+        // it as "in the future" and schedule an immediate double-fire loop.
+        if (!candidate.isAfter(LocalDateTime.now().plusSeconds(10))) {
             candidate = LocalDateTime.of(today.plusDays(1), time)
         }
 
