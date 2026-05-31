@@ -100,6 +100,10 @@ fun StatsScreen(
     val prioritizedInsights by viewModel.prioritizedInsights.collectAsState()
     val rhythmInsights by viewModel.rhythmInsights.collectAsState()
     val haptic = LocalHapticFeedback.current
+    val habits by viewModel.habits.collectAsState()
+    val hintInsightsShown by viewModel.hintInsightsShown.collectAsState()
+    val hintGoalShown by viewModel.hintGoalShown.collectAsState()
+
     val snackbarHostState = remember { androidx.compose.material3.SnackbarHostState() }
     val scope = androidx.compose.runtime.rememberCoroutineScope()
 
@@ -143,6 +147,13 @@ fun StatsScreen(
                 .padding(start = 24.dp, end = 24.dp, top = 24.dp, bottom = 120.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
+            if (!hintInsightsShown) {
+                com.mlue.app.ui.components.HintChip(
+                    text = "Insights improve as more habits are completed.",
+                    onDismiss = { viewModel.dismissHintInsights() },
+                    modifier = Modifier.padding(bottom = 8.dp, start = 0.dp, end = 0.dp)
+                )
+            }
             val isLightStats = MaterialTheme.colorScheme.background.luminance() > 0.5f
             // Explicit static token — tonalElevation alone triggers Material You tint on OEMs
             Surface(
@@ -169,7 +180,7 @@ fun StatsScreen(
                     )
                     if (activeGoals.isEmpty()) {
                         Text(
-                            text = "Patterns appear with time.",
+                            text = "Goals group habits into larger outcomes.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )

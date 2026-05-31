@@ -12,6 +12,7 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -109,6 +110,9 @@ fun HomeScreen(
     val habitMomentums by viewModel.habitMomentums.collectAsState()
     val adaptiveFocusedHabits by viewModel.adaptiveFocusedHabits.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
+    val hintFirstCompletionShown by viewModel.hintFirstCompletionShown.collectAsState()
+    val hintFirstStreakShown by viewModel.hintFirstStreakShown.collectAsState()
+    val hintFocusShown by viewModel.hintFocusShown.collectAsState()
     val context = LocalContext.current
     val listState = rememberLazyListState()
     val today = LocalDate.now()
@@ -216,9 +220,9 @@ fun HomeScreen(
                     androidx.compose.ui.graphics.Brush.verticalGradient(
                         colors = listOf(
                             if (darkMode) 
-                                androidx.compose.ui.graphics.Color.White.copy(alpha = 0.04f)
+                                androidx.compose.ui.graphics.Color.White.copy(alpha = 0.06f)
                             else 
-                                androidx.compose.ui.graphics.Color(0xFFA08070).copy(alpha = 0.04f),
+                                androidx.compose.ui.graphics.Color(0xFFA08070).copy(alpha = 0.06f),
                             androidx.compose.ui.graphics.Color.Transparent
                         )
                     )
@@ -354,13 +358,13 @@ fun HomeScreen(
                                 color = androidx.compose.material3.MaterialTheme.colorScheme.primary
                             )
                             Text(
-                                text = if (scheduledTodayCount == 0) "No habits today" else if (completedTodayCount == scheduledTodayCount) "Perfect Day!" else "Keep Going",
+                                text = if (habits.isEmpty()) "Start small." else if (scheduledTodayCount == 0) "No habits today" else if (completedTodayCount == scheduledTodayCount) "Perfect Day!" else "Keep Going",
                                 style = androidx.compose.material3.MaterialTheme.typography.headlineMedium.copy(fontWeight = androidx.compose.ui.text.font.FontWeight.Bold),
                                 maxLines = 1,
                                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                             )
                             Text(
-                                text = "$completedTodayCount of $scheduledTodayCount completed",
+                                text = if (habits.isEmpty()) "One consistent habit is enough to begin." else "$completedTodayCount of $scheduledTodayCount completed",
                                 style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
                                 color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
                                 maxLines = 1,
@@ -387,35 +391,70 @@ fun HomeScreen(
                                     )
                             )
                             
-                            // Track ring: explicit static color, NOT surfaceVariant
-                            CircularProgressIndicator(
-                                progress = { 1f },
-                                modifier = Modifier.size(80.dp),
-                                color = if (isLightMode)
-                                    com.mlue.app.ui.theme.LightOutlineVariant
-                                else
-                                    com.mlue.app.ui.theme.DarkSurfaceVariant,
-                                strokeWidth = 8.dp,
-                                strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
-                            )
-                            CircularProgressIndicator(
-                                progress = { animatedProgress },
-                                modifier = Modifier.size(80.dp),
-                                color = if (!darkMode) androidx.compose.material3.MaterialTheme.colorScheme.secondary else androidx.compose.material3.MaterialTheme.colorScheme.primary,
-                                strokeWidth = 8.dp,
-                                strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
-                            )
-                            Text(
-                                text = "${(animatedProgress * 100).toInt()}%",
-                                style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
-                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurface
-                            )
+                            if (habits.isEmpty()) {
+                                // Soft idle state for onboarding
+                                CircularProgressIndicator(
+                                    progress = { 1f },
+                                    modifier = Modifier.size(80.dp),
+                                    color = if (isLightMode)
+                                        com.mlue.app.ui.theme.LightOutlineVariant.copy(alpha = 0.5f)
+                                    else
+                                        com.mlue.app.ui.theme.DarkSurfaceVariant.copy(alpha = 0.5f),
+                                    strokeWidth = 8.dp,
+                                    strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
+                                )
+                            } else {
+                                // Track ring: explicit static color, NOT surfaceVariant
+                                CircularProgressIndicator(
+                                    progress = { 1f },
+                                    modifier = Modifier.size(80.dp),
+                                    color = if (isLightMode)
+                                        com.mlue.app.ui.theme.LightOutlineVariant
+                                    else
+                                        com.mlue.app.ui.theme.DarkSurfaceVariant,
+                                    strokeWidth = 8.dp,
+                                    strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
+                                )
+                                CircularProgressIndicator(
+                                    progress = { animatedProgress },
+                                    modifier = Modifier.size(80.dp),
+                                    color = if (!darkMode) androidx.compose.material3.MaterialTheme.colorScheme.secondary else androidx.compose.material3.MaterialTheme.colorScheme.primary,
+                                    strokeWidth = 8.dp,
+                                    strokeCap = androidx.compose.ui.graphics.StrokeCap.Round
+                                )
+                                Text(
+                                    text = "${(animatedProgress * 100).toInt()}%",
+                                    style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
+                                    color = androidx.compose.material3.MaterialTheme.colorScheme.onSurface
+                                )
+                            }
                         }
                     }
                 }
             }
 
-
+            if (!hintFirstCompletionShown && completedTodayCount > 0) {
+                item(key = "hintCompletion") {
+                    com.mlue.app.ui.components.HintChip(
+                        text = "You're building consistency.",
+                        onDismiss = { viewModel.dismissHintFirstCompletion() }
+                    )
+                }
+            } else if (!hintFirstStreakShown && displayHabits.any { it.currentStreak > 1 }) {
+                item(key = "hintStreak") {
+                    com.mlue.app.ui.components.HintChip(
+                        text = "Small repetitions become patterns over time.",
+                        onDismiss = { viewModel.dismissHintFirstStreak() }
+                    )
+                }
+            } else if (!hintFocusShown && focusMode) {
+                item(key = "hintFocus") {
+                    com.mlue.app.ui.components.HintChip(
+                        text = "Focus Mode prioritizes your most important habits.",
+                        onDismiss = { viewModel.dismissHintFocus() }
+                    )
+                }
+            }
 
             if (carouselGoals.isNotEmpty()) {
                 item(key = "activeGoalPager") {
@@ -559,20 +598,32 @@ fun HomeScreen(
                             verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(
-                                text = "No active goals yet",
+                                text = "Goals become meaningful once habits repeat.",
                                 style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
-                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurface
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurface,
+                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
                             )
-                            Button(onClick = {
-                                // Same safe nav pattern — prevents raw push onto back stack
-                                navController.navigate("insights") {
-                                    popUpTo(navController.graph.startDestinationId) {
-                                        saveState = true
+                            Button(
+                                onClick = {
+                                    // Same safe nav pattern — prevents raw push onto back stack
+                                    navController.navigate("insights") {
+                                        popUpTo(navController.graph.startDestinationId) {
+                                            saveState = true
+                                        }
+                                        launchSingleTop = true
+                                        restoreState = true
                                     }
-                                    launchSingleTop = true
-                                    restoreState = true
-                                }
-                            }) {
+                                },
+                                colors = if (habits.isEmpty()) {
+                                    androidx.compose.material3.ButtonDefaults.buttonColors(
+                                        containerColor = androidx.compose.material3.MaterialTheme.colorScheme.primaryContainer,
+                                        contentColor = androidx.compose.material3.MaterialTheme.colorScheme.onPrimaryContainer
+                                    )
+                                } else {
+                                    androidx.compose.material3.ButtonDefaults.buttonColors()
+                                },
+                                elevation = if (habits.isEmpty()) null else androidx.compose.material3.ButtonDefaults.buttonElevation()
+                            ) {
                                 Text("Create Goal")
                             }
                         }
@@ -637,38 +688,69 @@ fun HomeScreen(
                 }
             }
 
-            if (displayHabits.isEmpty()) {
-                item(key = "empty") {
-                    val isEmptyLight = androidx.compose.material3.MaterialTheme.colorScheme.background.luminance() > 0.5f
+            item(key = "onboarding") {
+                val isEmptyLight = androidx.compose.material3.MaterialTheme.colorScheme.background.luminance() > 0.5f
+                androidx.compose.animation.AnimatedVisibility(
+                    visible = displayHabits.isEmpty(),
+                    enter = androidx.compose.animation.fadeIn(animationSpec = androidx.compose.animation.core.tween(300)),
+                    exit = androidx.compose.animation.fadeOut(animationSpec = androidx.compose.animation.core.tween(300))
+                ) {
                     androidx.compose.material3.Surface(
                         color = if (isEmptyLight) com.mlue.app.ui.theme.LightSurface else com.mlue.app.ui.theme.DarkSurface,
-                        shape = androidx.compose.material3.MaterialTheme.shapes.large,
-                        border = if (isEmptyLight) BorderStroke(1.dp, androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant) else null,
-                        modifier = Modifier.fillMaxWidth()
+                        shape = androidx.compose.material3.MaterialTheme.shapes.medium,
+                        border = if (isEmptyLight) androidx.compose.foundation.BorderStroke(1.dp, androidx.compose.material3.MaterialTheme.colorScheme.outlineVariant) else null,
+                        shadowElevation = if (isEmptyLight) 1.dp else 2.dp,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 16.dp)
                     ) {
                         Column(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .padding(vertical = 48.dp, horizontal = 32.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                                .padding(24.dp),
+                            horizontalAlignment = Alignment.Start,
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
                             Text(
-                                text = "🌱",
-                                style = androidx.compose.material3.MaterialTheme.typography.headlineLarge
+                                text = "✨ Build consistency quietly",
+                                style = androidx.compose.material3.MaterialTheme.typography.labelLarge,
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.primary
                             )
                             Text(
-                                text = "Your first habit awaits",
-                                style = androidx.compose.material3.MaterialTheme.typography.titleMedium,
-                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurface,
-                                textAlign = TextAlign.Center
+                                text = "Start with one habit you can realistically repeat.",
+                                style = androidx.compose.material3.MaterialTheme.typography.bodyLarge,
+                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurface
                             )
-                            Text(
-                                text = "Tap + below to begin building your streak",
-                                style = androidx.compose.material3.MaterialTheme.typography.bodyMedium,
-                                color = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant,
-                                textAlign = TextAlign.Center
-                            )
+                            Button(
+                                onClick = { navController.navigate("add") },
+                                modifier = Modifier.padding(top = 8.dp)
+                            ) {
+                                Text("Create First Habit")
+                            }
+                            
+                            @OptIn(ExperimentalLayoutApi::class)
+                            androidx.compose.foundation.layout.FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.padding(top = 8.dp)
+                            ) {
+                                val suggestions = listOf("Sleep before 12", "Drink water", "Read 10 pages", "Morning walk")
+                                suggestions.forEach { suggestion ->
+                                    androidx.compose.material3.FilterChip(
+                                        selected = false,
+                                        onClick = { 
+                                            val uriEncoded = android.net.Uri.encode(suggestion)
+                                            navController.navigate("add?prefillTitle=$uriEncoded") 
+                                        },
+                                        label = { Text(suggestion) },
+                                        colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(
+                                            containerColor = androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+                                        ),
+                                        border = null,
+                                        shape = androidx.compose.foundation.shape.RoundedCornerShape(8.dp)
+                                    )
+                                }
+                            }
                         }
                     }
                 }

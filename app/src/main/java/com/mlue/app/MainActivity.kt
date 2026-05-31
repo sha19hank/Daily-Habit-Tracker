@@ -98,6 +98,9 @@ private fun AppNavHost(viewModel: HabitViewModel) {
     val showBottomBar = currentRoute in bottomBarRoutes
     val journalDialogRequest = rememberSaveable { mutableStateOf(false) }
     val goalDialogRequest = rememberSaveable { mutableStateOf(false) }
+
+    val habits by viewModel.habits.collectAsState()
+    val onboardingCompleted by viewModel.onboardingCompleted.collectAsState()
     // Tracks whether the journal editor overlay is open — used to hide the global FAB
     // so the editor's own Save/Close actions are the only action surface.
     var journalEditorOpen by remember { mutableStateOf(false) }
@@ -210,16 +213,19 @@ private fun AppNavHost(viewModel: HabitViewModel) {
                     )
                 }
                 composable("settings") { SettingsScreen(navController = navController, viewModel = viewModel) }
+                composable("how_works") { com.mlue.app.ui.screens.HowMlueWorksScreen(navController = navController, darkMode = darkMode) }
                 composable(
-                    route = "add?habitId={habitId}&goalId={goalId}",
+                    route = "add?habitId={habitId}&goalId={goalId}&prefillTitle={prefillTitle}",
                     arguments = listOf(
                         navArgument("habitId") { type = NavType.LongType; defaultValue = -1L },
-                        navArgument("goalId") { type = NavType.LongType; defaultValue = -1L }
+                        navArgument("goalId") { type = NavType.LongType; defaultValue = -1L },
+                        navArgument("prefillTitle") { type = NavType.StringType; nullable = true }
                     )
                 ) { backStackEntry ->
                     val habitId = backStackEntry.arguments?.getLong("habitId").takeIf { it != -1L }
                     val goalId = backStackEntry.arguments?.getLong("goalId").takeIf { it != -1L }
-                    AddHabitScreen(navController = navController, viewModel = viewModel, habitId = habitId, prefilledGoalId = goalId)
+                    val prefillTitle = backStackEntry.arguments?.getString("prefillTitle")
+                    AddHabitScreen(navController = navController, viewModel = viewModel, habitId = habitId, prefilledGoalId = goalId, prefillTitle = prefillTitle)
                 }
             }
         }
@@ -278,6 +284,8 @@ private fun AppNavHost(viewModel: HabitViewModel) {
                 modifier = Modifier.align(Alignment.BottomCenter)
             )
         }
+
+        // Onboarding overlay removed in Sprint 3H -> Ambient Onboarding
     }
 }
 

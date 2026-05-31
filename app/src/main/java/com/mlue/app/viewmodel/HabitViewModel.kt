@@ -638,6 +638,33 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
         viewModelScope.launch(Dispatchers.IO) { settings.setFocusMode(enabled) }
     }
 
+    val onboardingCompleted: StateFlow<Boolean> = settings.onboardingCompleted()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    val hintFirstCompletionShown: StateFlow<Boolean> = settings.hintFirstCompletionShown()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+    val hintFirstStreakShown: StateFlow<Boolean> = settings.hintFirstStreakShown()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+    val hintInsightsShown: StateFlow<Boolean> = settings.hintInsightsShown()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+    val hintJournalShown: StateFlow<Boolean> = settings.hintJournalShown()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+    val hintGoalShown: StateFlow<Boolean> = settings.hintGoalShown()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+    val hintFocusShown: StateFlow<Boolean> = settings.hintFocusShown()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), false)
+
+    fun setOnboardingCompleted(completed: Boolean) {
+        viewModelScope.launch(Dispatchers.IO) { settings.setOnboardingCompleted(completed) }
+    }
+
+    fun dismissHintFirstCompletion() { viewModelScope.launch(Dispatchers.IO) { settings.dismissHintFirstCompletion() } }
+    fun dismissHintFirstStreak() { viewModelScope.launch(Dispatchers.IO) { settings.dismissHintFirstStreak() } }
+    fun dismissHintInsights() { viewModelScope.launch(Dispatchers.IO) { settings.dismissHintInsights() } }
+    fun dismissHintJournal() { viewModelScope.launch(Dispatchers.IO) { settings.dismissHintJournal() } }
+    fun dismissHintGoal() { viewModelScope.launch(Dispatchers.IO) { settings.dismissHintGoal() } }
+    fun dismissHintFocus() { viewModelScope.launch(Dispatchers.IO) { settings.dismissHintFocus() } }
+
     fun setHaptics(enabled: Boolean) {
         viewModelScope.launch(Dispatchers.IO) { settings.setHaptics(enabled) }
     }

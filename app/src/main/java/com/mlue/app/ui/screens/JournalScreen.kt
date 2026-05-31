@@ -97,6 +97,7 @@ fun JournalScreen(
     onEditorStateChange: (Boolean) -> Unit = {}
 ) {
     val entries by viewModel.journalEntries.collectAsState()
+    val hintJournalShown by viewModel.hintJournalShown.collectAsState()
 
     // Use remember (NOT rememberSaveable) so that editor state never leaks
     // across config changes with a stale entry reference.
@@ -156,16 +157,11 @@ fun JournalScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "Nothing captured yet.",
-                    style = MaterialTheme.typography.titleLarge,
-                    color = MaterialTheme.colorScheme.onSurface
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text(
-                    text = "Tap + to write your first reflection.",
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
+                    text = "Small reflections help reveal patterns over time.",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 24.dp)
                 )
                 Spacer(modifier = Modifier.height(24.dp))
                 Button(onClick = {
@@ -184,6 +180,16 @@ fun JournalScreen(
                 contentPadding = PaddingValues(start = 24.dp, top = 16.dp, end = 24.dp, bottom = 104.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                if (!hintJournalShown) {
+                    item(key = "hintJournal") {
+                        com.mlue.app.ui.components.HintChip(
+                            text = "Reflection adds context to your routines.",
+                            onDismiss = { viewModel.dismissHintJournal() },
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                    }
+                }
+
                 val keys = listOf("Today", "Yesterday", "Older").filter { groupedEntries.containsKey(it) }
                 keys.forEach { sectionKey ->
                     item(key = "header_$sectionKey") {

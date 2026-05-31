@@ -33,6 +33,13 @@ class SettingsRepository(private val context: Context) {
         val stepBaseValue = stringPreferencesKey("step_base_value")
         val stepCountDate = stringPreferencesKey("step_count_date")
         val stepCountValue = stringPreferencesKey("step_count_value")
+        val onboardingCompleted = booleanPreferencesKey("onboarding_completed")
+        val hintFirstCompletion = booleanPreferencesKey("hint_first_completion")
+        val hintFirstStreak = booleanPreferencesKey("hint_first_streak")
+        val hintInsights = booleanPreferencesKey("hint_insights")
+        val hintJournal = booleanPreferencesKey("hint_journal")
+        val hintGoal = booleanPreferencesKey("hint_goal")
+        val hintFocus = booleanPreferencesKey("hint_focus")
     }
 
     fun darkModeEnabled(): Flow<Boolean> = context.dataStore.data.map { it[Keys.darkMode] ?: false }
@@ -40,6 +47,13 @@ class SettingsRepository(private val context: Context) {
     fun focusModeEnabled(): Flow<Boolean> = context.dataStore.data.map { it[Keys.focusMode] ?: false }
     fun hapticsEnabled(): Flow<Boolean> = context.dataStore.data.map { it[Keys.haptics] ?: true }
     fun animationsEnabled(): Flow<Boolean> = context.dataStore.data.map { it[Keys.animations] ?: true }
+    fun onboardingCompleted(): Flow<Boolean> = context.dataStore.data.map { it[Keys.onboardingCompleted] ?: false }
+    fun hintFirstCompletionShown(): Flow<Boolean> = context.dataStore.data.map { it[Keys.hintFirstCompletion] ?: false }
+    fun hintFirstStreakShown(): Flow<Boolean> = context.dataStore.data.map { it[Keys.hintFirstStreak] ?: false }
+    fun hintInsightsShown(): Flow<Boolean> = context.dataStore.data.map { it[Keys.hintInsights] ?: false }
+    fun hintJournalShown(): Flow<Boolean> = context.dataStore.data.map { it[Keys.hintJournal] ?: false }
+    fun hintGoalShown(): Flow<Boolean> = context.dataStore.data.map { it[Keys.hintGoal] ?: false }
+    fun hintFocusShown(): Flow<Boolean> = context.dataStore.data.map { it[Keys.hintFocus] ?: false }
 
     suspend fun setDarkMode(enabled: Boolean) {
         prefs.edit().putBoolean("cached_theme", enabled).apply()
@@ -61,6 +75,17 @@ class SettingsRepository(private val context: Context) {
     suspend fun setAnimations(enabled: Boolean) {
         context.dataStore.edit { it[Keys.animations] = enabled }
     }
+
+    suspend fun setOnboardingCompleted(completed: Boolean) {
+        context.dataStore.edit { it[Keys.onboardingCompleted] = completed }
+    }
+
+    suspend fun dismissHintFirstCompletion() { context.dataStore.edit { it[Keys.hintFirstCompletion] = true } }
+    suspend fun dismissHintFirstStreak() { context.dataStore.edit { it[Keys.hintFirstStreak] = true } }
+    suspend fun dismissHintInsights() { context.dataStore.edit { it[Keys.hintInsights] = true } }
+    suspend fun dismissHintJournal() { context.dataStore.edit { it[Keys.hintJournal] = true } }
+    suspend fun dismissHintGoal() { context.dataStore.edit { it[Keys.hintGoal] = true } }
+    suspend fun dismissHintFocus() { context.dataStore.edit { it[Keys.hintFocus] = true } }
 
     suspend fun getStepBaseline(date: LocalDate): Int? {
         val prefs = context.dataStore.data.first()

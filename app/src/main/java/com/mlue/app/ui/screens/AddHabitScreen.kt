@@ -71,13 +71,14 @@ fun AddHabitScreen(
     navController: NavController,
     viewModel: HabitViewModel,
     habitId: Long? = null,
-    prefilledGoalId: Long? = null
+    prefilledGoalId: Long? = null,
+    prefillTitle: String? = null
 ) {
     val habits by viewModel.habits.collectAsState()
     val habitToEdit = remember(habitId, habits) {
         if (habitId != null) habits.firstOrNull { it.id == habitId } else null
     }
-    var name by remember { mutableStateOf("") }
+    var name by remember { mutableStateOf(prefillTitle ?: "") }
     var description by remember { mutableStateOf("") }
     var category by remember { mutableStateOf("") }
     var selectedDays by remember { mutableStateOf(setOf<Int>()) }
@@ -139,6 +140,8 @@ fun AddHabitScreen(
     var goalStartDate by rememberSaveable { mutableStateOf(LocalDate.now()) }
     var goalDeadline by rememberSaveable { mutableStateOf<LocalDate?>(null) }
 
+    val isFirstHabit = habitId == null && habits.isEmpty()
+
     LaunchedEffect(habitToEdit, prefilledGoalId) {
         if (habitToEdit != null) {
             name = habitToEdit.name
@@ -175,6 +178,38 @@ fun AddHabitScreen(
                 .imePadding()
                 .padding(24.dp)
         ) {
+            if (isFirstHabit) {
+                Text(
+                    text = "Start with one habit you can repeat consistently.",
+                    style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                    color = androidx.compose.material3.MaterialTheme.colorScheme.onBackground.copy(alpha = 0.6f),
+                    modifier = Modifier.padding(bottom = 12.dp)
+                )
+                
+                // Soft suggestion chips (inspiration only)
+                androidx.compose.foundation.layout.FlowRow(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 24.dp),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    val suggestions = listOf("Sleep before 12", "Drink water", "Read 10 pages", "Morning walk")
+                    suggestions.forEach { suggestion ->
+                        androidx.compose.material3.Surface(
+                            onClick = { name = suggestion },
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(12.dp),
+                            color = androidx.compose.material3.MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                            contentColor = androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
+                        ) {
+                            Text(
+                                text = suggestion,
+                                style = androidx.compose.material3.MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)
+                            )
+                        }
+                    }
+                }
+            }
+
             OutlinedTextField(
                 value = name,
                 onValueChange = {
