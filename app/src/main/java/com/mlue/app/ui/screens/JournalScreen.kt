@@ -1,6 +1,7 @@
 package com.mlue.app.ui.screens
 
 import android.app.DatePickerDialog
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -8,13 +9,18 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.MoreVert
@@ -87,7 +93,8 @@ fun generateTitle(body: String, time: LocalTime): String {
 fun JournalScreen(
     viewModel: HabitViewModel,
     openDialogRequest: Boolean,
-    onDialogRequestConsumed: () -> Unit
+    onDialogRequestConsumed: () -> Unit,
+    onEditorStateChange: (Boolean) -> Unit = {}
 ) {
     val entries by viewModel.journalEntries.collectAsState()
 
@@ -106,6 +113,12 @@ fun JournalScreen(
         }
     }
 
+    // Report editor open/closed state to parent so the global FAB can hide when editing.
+    // LaunchedEffect ensures the callback fires after each state change, not during composition.
+    LaunchedEffect(isSheetOpen) {
+        onEditorStateChange(isSheetOpen)
+    }
+
     val today = LocalDate.now()
     val yesterday = today.minusDays(1)
 
@@ -120,7 +133,18 @@ fun JournalScreen(
     }
 
     Scaffold(
-        topBar = { TopAppBar(title = { Text("Journal") }) }
+        topBar = {
+            TopAppBar(
+                title = {
+                    Text(
+                        "Journal",
+                        style = MaterialTheme.typography.titleLarge.copy(
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                        )
+                    )
+                }
+            )
+        }
     ) { padding ->
         if (entries.isEmpty()) {
             Column(
@@ -133,7 +157,7 @@ fun JournalScreen(
             ) {
                 Text(
                     text = "Nothing captured yet.",
-                    style = MaterialTheme.typography.titleMedium,
+                    style = MaterialTheme.typography.titleLarge,
                     color = MaterialTheme.colorScheme.onSurface
                 )
                 Spacer(modifier = Modifier.height(8.dp))
@@ -165,7 +189,9 @@ fun JournalScreen(
                     item(key = "header_$sectionKey") {
                         Text(
                             text = sectionKey,
-                            style = MaterialTheme.typography.labelLarge,
+                            style = MaterialTheme.typography.labelLarge.copy(
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                            ),
                             color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.padding(top = 12.dp, bottom = 4.dp)
                         )
@@ -207,7 +233,7 @@ fun JournalScreen(
             key(editingEntry?.id) {
                 JournalEditor(
                     initialEntry = editingEntry,
-                    onSave = { title, body, date, mood ->
+                    onSave = { title, body, date, mood, color ->
                         val finalTitle = title.ifBlank { generateTitle(body, LocalTime.now()) }
                         val current = editingEntry
                         if (current != null) {
@@ -216,11 +242,12 @@ fun JournalScreen(
                                     title = finalTitle,
                                     body = body,
                                     date = date,
-                                    mood = mood
+                                    mood = mood,
+                                    color = color
                                 )
                             )
                         } else {
-                            viewModel.upsertJournalEntry(finalTitle, body, date, mood)
+                            viewModel.upsertJournalEntry(finalTitle, body, date, mood, color)
                         }
                         isSheetOpen = false
                     },
@@ -278,14 +305,26 @@ fun JournalCard(
         else -> null
     }
 
+    // Adaptive journal card tint — calm wash, not habit-card saturation
+    // Warm colors (red/orange/amber): 0.10 alpha; cool/light colors: 0.13 alpha
+    val cardColor = if (entry.color != 0) {
+        val base = Color(entry.color)
+        val isWarm = base.red > base.blue
+        val alpha = if (isLightMode) (if (isWarm) 0.10f else 0.13f) else 0.15f
+        if (isLightMode) Color(0xFFFFFDF9).copy(alpha = 0f).let { base.copy(alpha = alpha) }
+        else base.copy(alpha = alpha)
+    } else {
+        if (isLightMode) com.mlue.app.ui.theme.LightSurface else MaterialTheme.colorScheme.surface
+    }
+
     Surface(
-        color = if (isLightMode) Color(0xFFFFFDF9) else MaterialTheme.colorScheme.surface,
+        color = cardColor,
         shadowElevation = if (isLightMode) 0.dp else 1.dp,
         tonalElevation = if (isLightMode) 0.dp else 1.dp,
         shape = MaterialTheme.shapes.medium,
-        border = if (isLightMode) androidx.compose.foundation.BorderStroke(
-            1.dp,
-            MaterialTheme.colorScheme.outline
+        border = if (isLightMode && entry.color == 0) androidx.compose.foundation.BorderStroke(
+            0.5.dp,
+            com.mlue.app.ui.theme.LightTopologyBorder
         ) else null,
         modifier = Modifier
             .fillMaxWidth()
@@ -307,6 +346,21 @@ fun JournalCard(
                 onClick = onClick
             )
     ) {
+        // 4dp left accent bar for colored entries — editorial signal, not saturation boost
+        Row(modifier = Modifier.fillMaxWidth()) {
+            if (entry.color != 0) {
+                Box(
+                    modifier = Modifier
+                        .width(4.dp)
+                        .fillMaxHeight()
+                        .background(
+                            color = Color(entry.color).copy(alpha = 0.60f),
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(
+                                topStart = 20.dp, bottomStart = 20.dp
+                            )
+                        )
+                )
+            }
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -381,14 +435,16 @@ fun JournalCard(
                 }
             }
         }
+        }
     }
 }
+
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun JournalEditor(
     initialEntry: JournalEntryEntity?,
-    onSave: (String, String, LocalDate, String?) -> Unit,
+    onSave: (String, String, LocalDate, String?, Int) -> Unit,
     onCancel: () -> Unit
 ) {
     val context = LocalContext.current
@@ -400,6 +456,8 @@ fun JournalEditor(
     var body by remember { mutableStateOf(initialEntry?.body ?: "") }
     var mood by remember { mutableStateOf(initialEntry?.mood ?: "") }
     var entryDate by remember { mutableStateOf(initialEntry?.date ?: LocalDate.now()) }
+    // Journal color — 0 = neutral (no tint). Reuses habit card palette.
+    var selectedColor by remember { mutableStateOf(initialEntry?.color ?: 0) }
 
     // Static opaque token for focused container — no alpha copy of Material-derived surfaceVariant
     val editorFocusedBg = if (MaterialTheme.colorScheme.background.luminance() > 0.5f)
@@ -425,7 +483,7 @@ fun JournalEditor(
                     TextButton(
                         onClick = {
                             if (body.isNotBlank()) {
-                                onSave(title, body, entryDate, mood.ifBlank { null })
+                                onSave(title, body, entryDate, mood.ifBlank { null }, selectedColor)
                             }
                         },
                         enabled = body.isNotBlank()
@@ -512,6 +570,44 @@ fun JournalEditor(
             }
 
             Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                "Color",
+                style = MaterialTheme.typography.labelMedium,
+                modifier = Modifier.padding(start = 4.dp)
+            )
+            androidx.compose.foundation.lazy.LazyRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                item {
+                    val isNeutral = selectedColor == 0
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .background(
+                                color = if (MaterialTheme.colorScheme.background.luminance() > 0.5f)
+                                    com.mlue.app.ui.theme.LightSurfaceVariant
+                                else
+                                    com.mlue.app.ui.theme.DarkSurfaceVariant,
+                                shape = CircleShape
+                            )
+                            .then(if (isNeutral) Modifier.border(2.dp, MaterialTheme.colorScheme.primary, CircleShape) else Modifier)
+                            .clickable { selectedColor = 0 }
+                    )
+                }
+                items(JOURNAL_COLORS) { colorInt ->
+                    val isSel = selectedColor == colorInt
+                    Box(
+                        modifier = Modifier
+                            .size(32.dp)
+                            .background(Color(colorInt).copy(alpha = 0.75f), CircleShape)
+                            .then(if (isSel) Modifier.border(2.dp, Color(colorInt), CircleShape) else Modifier)
+                            .clickable { selectedColor = colorInt }
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
             TextButton(
                 onClick = {
                     val current = entryDate
@@ -532,3 +628,14 @@ fun JournalEditor(
         }
     }
 }
+
+// Journal color palette — same hues as AddHabitScreen DEFAULT_COLORS
+// Calmer presentation via lower alpha on the card, not lower saturation here.
+private val JOURNAL_COLORS = listOf(
+    0xFF3B82F6.toInt(),  // Blue
+    0xFF10B981.toInt(),  // Emerald
+    0xFFF59E0B.toInt(),  // Amber
+    0xFFEF4444.toInt(),  // Red
+    0xFF8B5CF6.toInt(),  // Violet
+    0xFF14B8A6.toInt()   // Teal
+)

@@ -57,6 +57,8 @@ import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.navigation.NavController
 import kotlinx.coroutines.launch
+import android.media.ToneGenerator
+import android.media.AudioManager
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.Alignment
@@ -98,6 +100,7 @@ fun HomeScreen(
     val stepState by viewModel.stepState.collectAsState()
     val focusMode by viewModel.focusModeEnabled.collectAsState()
     val haptics by viewModel.hapticsEnabled.collectAsState()
+    val sounds by viewModel.soundsEnabled.collectAsState()
     val systemDark = androidx.compose.foundation.isSystemInDarkTheme()
     val cachedTheme = viewModel.getCachedTheme()
     val darkMode by viewModel.darkModeEnabled.collectAsState(initial = cachedTheme ?: systemDark)
@@ -113,6 +116,25 @@ fun HomeScreen(
     val scope = rememberCoroutineScope()
     val haptic = LocalHapticFeedback.current
     var quickNote by rememberSaveable { mutableStateOf("") }
+
+    // Soft completion sound — ToneGenerator, no asset files required.
+    // TONE_PROP_ACK produces a warm, crisp confirmation click.
+    // Volume at 60% — audible but not arcade-like.
+    val playCompletionSound: () -> Unit = remember(sounds) {
+        {
+            if (sounds) {
+                try {
+                    val tg = ToneGenerator(AudioManager.STREAM_MUSIC, 60)
+                    tg.startTone(ToneGenerator.TONE_PROP_ACK, 100) // 100ms
+                    android.os.Handler(android.os.Looper.getMainLooper()).postDelayed(
+                        { tg.release() }, 150
+                    )
+                } catch (_: Exception) {
+                    // Silently ignore: ToneGenerator unavailable on some low-memory devices
+                }
+            }
+        }
+    }
 
     // adaptiveFocusedHabits handles both the filter-to-today AND the intelligent sort:
     // incomplete habits first, then by streak. When focus mode is OFF, it mirrors
@@ -189,10 +211,25 @@ fun HomeScreen(
 
     Scaffold(
         topBar = {
-            Column {
+            Column(
+                modifier = Modifier.background(
+                    androidx.compose.ui.graphics.Brush.verticalGradient(
+                        colors = listOf(
+                            if (darkMode) 
+                                androidx.compose.ui.graphics.Color.White.copy(alpha = 0.04f)
+                            else 
+                                androidx.compose.ui.graphics.Color(0xFFA08070).copy(alpha = 0.04f),
+                            androidx.compose.ui.graphics.Color.Transparent
+                        )
+                    )
+                )
+            ) {
                 TopAppBar(
                     colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
-                        containerColor = androidx.compose.material3.MaterialTheme.colorScheme.background
+                        // WS2: Restored seamless identity. Transparent TopAppBar lets the soft 
+                        // vertical gradient show through, creating a faint edge-to-edge gloss 
+                        // rather than a boxed UI element.
+                        containerColor = androidx.compose.ui.graphics.Color.Transparent
                     ),
                     title = {
                         Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
@@ -295,17 +332,18 @@ fun HomeScreen(
                     shape = androidx.compose.material3.MaterialTheme.shapes.extraLarge,
                     colors = androidx.compose.material3.CardDefaults.cardColors(
                         containerColor = if (isLightMode)
-                            com.mlue.app.ui.theme.LightSurfaceVariant
+                            com.mlue.app.ui.theme.LightSurfaceElevated  // Layer 2: elevated interactive
                         else
                             com.mlue.app.ui.theme.DarkSurface
                     ),
                     elevation = androidx.compose.material3.CardDefaults.cardElevation(defaultElevation = 0.dp),
-                    border = if (isLightMode) androidx.compose.foundation.BorderStroke(1.dp, androidx.compose.material3.MaterialTheme.colorScheme.outline) else null
+                    // 0.75dp: primary interactive surface — highest topology weight in light mode
+                    border = if (isLightMode) androidx.compose.foundation.BorderStroke(0.75.dp, com.mlue.app.ui.theme.LightTopologyBorder) else null
                 ) {
                     androidx.compose.foundation.layout.Row(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(24.dp),
+                            .padding(horizontal = 20.dp, vertical = 18.dp),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -397,11 +435,12 @@ fun HomeScreen(
                         val alpha = 1f - (kotlin.math.abs(pageOffset) * 0.4f).coerceIn(0f, 0.4f)
 
                         val isGoalLightMode = androidx.compose.material3.MaterialTheme.colorScheme.background.luminance() > 0.5f
-                        // Dark: DarkSurfaceVariant replaces banned secondaryContainer
+                        // Dark: deep burnt amber — cinematic focus object (Sprint 3C)
+                        // Light: editorial warm maroon — unchanged
                         val goalCardBg = if (isGoalLightMode)
                             com.mlue.app.ui.theme.LightHeroCardBackground
                         else
-                            com.mlue.app.ui.theme.DarkSurfaceVariant
+                            com.mlue.app.ui.theme.DarkGoalCardBg
 
                         androidx.compose.material3.Card(
                             modifier = Modifier
@@ -431,15 +470,16 @@ fun HomeScreen(
                         ) {
                             Column(modifier = Modifier.padding(20.dp)) {
                                 val isGoalLightMode2 = androidx.compose.material3.MaterialTheme.colorScheme.background.luminance() > 0.5f
-                                // Dark text: DarkOnBackground replaces banned onSecondaryContainer
+                                // Dark: near-white for clean contrast on deep amber; light: warm off-white
                                 val onGoalCard = if (isGoalLightMode2)
                                     com.mlue.app.ui.theme.LightHeroCardOnSurface
                                 else
-                                    com.mlue.app.ui.theme.DarkOnBackground
+                                    com.mlue.app.ui.theme.DarkGoalCardText
+                                // Dark: muted warm gold; light: warm muted subtext
                                 val onGoalCardSub = if (isGoalLightMode2)
                                     com.mlue.app.ui.theme.LightHeroCardSubtext
                                 else
-                                    com.mlue.app.ui.theme.DarkOnSurfaceVariant
+                                    com.mlue.app.ui.theme.DarkGoalCardSubtext
 
                                 Text(
                                     text = if (progressDetails.overallPercent == 100) "🏆 Completed Goal" else "🎯 Active Goal",
@@ -478,17 +518,16 @@ fun HomeScreen(
                                     animationSpec = com.mlue.app.ui.theme.AppMotion.floatTween(com.mlue.app.ui.theme.AppMotion.durationMedium),
                                     label = "goalProgress"
                                 )
-                                // Light mode: warm cream fill reads clearly against the dark maroon card.
-                                // Track is a deeper maroon to distinguish track floor from fill.
-                                // Dark mode: unchanged slate tokens.
+                                // Light: warm cream fill on dark maroon — maximum contrast
+                                // Dark: amber fill on deep amber trough — cinematic, on-brand
                                 val progressTrackColor = if (isGoalLightMode2)
                                     com.mlue.app.ui.theme.LightHeroCardTrack
                                 else
-                                    com.mlue.app.ui.theme.DarkOutline
+                                    com.mlue.app.ui.theme.DarkGoalCardTrack
                                 val progressFillColor = if (isGoalLightMode2)
-                                    com.mlue.app.ui.theme.LightHeroCardOnSurface  // warm off-white — maximum contrast on dark maroon
+                                    com.mlue.app.ui.theme.LightHeroCardOnSurface
                                 else
-                                    com.mlue.app.ui.theme.DarkOnBackground
+                                    com.mlue.app.ui.theme.PrimaryAmber  // amber fill — same family as FAB
 
                                 androidx.compose.material3.LinearProgressIndicator(
                                     progress = { animatedGoalProgress },
@@ -550,7 +589,9 @@ fun HomeScreen(
                     Column {
                         Text(
                             text = "Today's habits",
-                            style = androidx.compose.material3.MaterialTheme.typography.titleMedium
+                            style = androidx.compose.material3.MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                            )
                         )
                         if (focusMode) {
                             Text(
@@ -653,9 +694,12 @@ fun HomeScreen(
                         }
                     },
                     onToggleCompletion = {
+                        val wasCompleted = habit.lastCompletedDate == today
                         if (haptics) {
-                            haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                         }
+                        // Sound only fires on completion, not uncheck — keeps feedback intentional
+                        if (!wasCompleted) playCompletionSound()
                         viewModel.toggleHabitCompletion(habit)
                     },
                     onDelete = {
@@ -706,12 +750,16 @@ fun HomeScreen(
                 item(key = "quickJournal") {
                     val isLightQuick = androidx.compose.material3.MaterialTheme.colorScheme.background.luminance() > 0.5f
                     Surface(
-                        // Explicit static token — prevents tonalElevation OEM tint bleed
+                        // Layer 2: elevated interactive surface — visibly above standard LightSurface cards
                         color = if (isLightQuick)
-                            com.mlue.app.ui.theme.LightSurfaceVariant
+                            com.mlue.app.ui.theme.LightSurfaceElevated
                         else
                             com.mlue.app.ui.theme.DarkSurface,
-                        shape = androidx.compose.material3.MaterialTheme.shapes.medium
+                        shape = androidx.compose.material3.MaterialTheme.shapes.medium,
+                        // 0.75dp: primary interactive surface border weight
+                        border = if (isLightQuick)
+                            androidx.compose.foundation.BorderStroke(0.75.dp, com.mlue.app.ui.theme.LightTopologyBorder)
+                        else null
                     ) {
                         Column(
                             modifier = Modifier

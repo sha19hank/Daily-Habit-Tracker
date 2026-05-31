@@ -10,9 +10,13 @@ val DarkOnBackground = Color(0xFFF1F5F9)
 val DarkOnSurfaceVariant = Color(0xFF94A3B8)
 val DarkOutline = Color(0xFF2D3748)
 
-// Warm Editorial Light Mode Colors
-val LightBackground = Color(0xFFF5F1EA)
+// Warm Editorial Light Mode Colors — 3-Layer Tonal System
+// Layer 0 (Background): #F1ECE4 — warm linen, visibly below card surfaces
+// Layer 1 (Cards):      #FFFDF9 — soft ivory (bright, tactile)
+// Layer 2 (Elevated):   #FFFEFC — barely-warmer-than-pure-white (interactive surfaces)
+val LightBackground = Color(0xFFF1ECE4)   // Deeper warm linen — clear depth vs cards
 val LightSurface = Color(0xFFFFFDF9)
+val LightSurfaceElevated = Color(0xFFFFFEFC) // Layer 2: progress card, quick journal, settings toggles, calendar container
 val LightSurfaceVariant = Color(0xFFF7F2EC)
 val LightOnBackground = Color(0xFF1F1A17)
 val LightOnSurfaceVariant = Color(0xFF6B625C)
@@ -59,3 +63,26 @@ val ErrorContainerLight = Color(0xFFFEE2E2)
 val OnErrorContainerLight = Color(0xFFE5484D)
 
 val SuccessGreen = Color(0xFF2FA36B)
+
+// ── Sprint 3C: Topology Border Tokens ─────────────────────────────────────────
+// Borders SUPPORT tonal separation — they do NOT become the topology.
+// Light mode uses more visible hairlines (surfaces blend in bright light).
+// Dark mode uses near-invisible lines — tonal shift IS the separator.
+
+// Light mode hairline tokens (warm, editorial — not gray)
+val LightTopologyBorder = Color(0xFFE8E0D4)        // Warm hairline — card/container edges
+val LightTopologyBorderStrong = Color(0xFFDDD4C6)  // Slightly more defined — form fields, analytics
+
+// Dark mode hairline tokens (~40–50% softer than light equivalents)
+// Many surfaces will use no border at all — these are for cases where
+// a hairline genuinely helps separate adjacent dark surfaces.
+val DarkTopologyBorder = Color(0xFF1E2330)          // Almost invisible — very subtle depth
+val DarkTopologyBorderStrong = Color(0xFF232A38)    // Slightly readable — use sparingly
+
+// ── Sprint 3C: Active Goal Card — Dark Mode Upgrade ────────────────────────────
+// Transforms the goal card from a blended slate into a cinematic bronze focus object.
+// Same amber family as FAB and nav capsule — but deeper, richer, more editorial.
+val DarkGoalCardBg = Color(0xFF2A1F0E)        // Deep burnt amber — cinematic, not bright
+val DarkGoalCardText = Color(0xFFF8F7F4)      // Near-white — clean, premium contrast on dark amber
+val DarkGoalCardSubtext = Color(0xFFBFA880)   // Muted warm gold — subdued secondary context
+val DarkGoalCardTrack = Color(0xFF4A3520)     // Deep amber trough — progress bar track

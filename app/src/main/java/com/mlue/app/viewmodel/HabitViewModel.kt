@@ -107,8 +107,7 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
             val day = today.minusDays((6 - offset).toLong())
             val completed = completions.count { it.completionDate == day }
             val scheduled = habits.count { habit ->
-                !habit.paused &&
-                (habit.scheduledDays.isEmpty() || habit.scheduledDays.contains(day.dayOfWeek.value))
+                habit.isScheduledOn(day)
             }
             DailyStats(date = day, completed = completed, scheduled = scheduled)
         }
@@ -153,9 +152,7 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
         for (day in days) {
             val completedToday = completions.count { it.completionDate == day }
             val scheduledToday = habits.count { habit ->
-                !habit.paused &&
-                (habit.createdDate.isBefore(day) || habit.createdDate.isEqual(day)) &&
-                (habit.scheduledDays.isEmpty() || habit.scheduledDays.contains(day.dayOfWeek.value))
+                habit.isScheduledOn(day)
             }
             totalCompleted += completedToday
             totalScheduled += scheduledToday
@@ -479,10 +476,11 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
         title: String,
         body: String,
         date: LocalDate,
-        mood: String?
+        mood: String?,
+        color: Int = 0
     ) {
         viewModelScope.launch(Dispatchers.IO) {
-            repository.upsertJournalEntry(title, body, date, mood)
+            repository.upsertJournalEntry(title, body, date, mood, color)
         }
     }
 
@@ -587,8 +585,8 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
 
             val days = (1..month.lengthOfMonth()).map { day ->
                 val date = month.atDay(day)
-                val scheduledCount = habits.count {
-                    !it.paused && repository.isScheduledForDay(it, date)
+                val scheduledCount = habits.count { habit ->
+                    habit.isScheduledOn(date)
                 }
                 val completedCount = completionMap[date.toString()]?.count ?: 0
                 val journalCount = journalMap[date]?.size ?: 0
@@ -625,7 +623,7 @@ class HabitViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun isScheduledToday(habit: HabitEntity): Boolean {
-        return repository.isScheduledForDay(habit, LocalDate.now())
+        return habit.isScheduledOn(LocalDate.now())
     }
 
     fun setDarkMode(enabled: Boolean) {
@@ -774,19 +772,21 @@ private fun selectActiveGoal(goals: List<GoalEntity>, today: LocalDate): GoalEnt
 // ─────────────────────────────────────────────────────────────────────────────
 
 /**
- * Shared utility mirroring HabitRepository.scheduledOccurrencesInRange.
- * Duplicated here to avoid crossing the Repository abstraction boundary from
- * file-level pure functions. O(days) — fast for any realistic month window.
+ * Count scheduled occurrences of [habit] in the [start]..[end] range.
+ * Uses isScheduledOn per-day — consistent with all other temporal guards.
+ * O(days) — fast for any realistic analytics window.
  */
 private fun habitScheduledInRange(habit: HabitEntity, start: LocalDate, end: LocalDate): Int {
     if (end.isBefore(start)) return 0
-    val scheduled = habit.scheduledDays
-    val daysBetween = ChronoUnit.DAYS.between(start, end).toInt()
-    if (scheduled.isEmpty()) return daysBetween + 1
+    // Fast-path: if habit didn't exist yet in this entire range, skip the loop.
+    if (habit.createdDate.isAfter(end)) return 0
+    val effectiveStart = maxOf(start, habit.createdDate)
+    val daysBetween = ChronoUnit.DAYS.between(effectiveStart, end).toInt()
+    if (habit.scheduledDays.isEmpty()) return daysBetween + 1
     var count = 0
-    var date = start
+    var date = effectiveStart
     repeat(daysBetween + 1) {
-        if (scheduled.contains(date.dayOfWeek.value)) count++
+        if (habit.isScheduledOn(date)) count++
         date = date.plusDays(1)
     }
     return count
@@ -835,20 +835,22 @@ private fun computeMonthlyAnalytics(
     val strongestHabitName = habits.firstOrNull { it.id == strongestId }?.name
 
     // ── Most missed weekday ──
-    // Pre-compute scheduled count per day-of-week to avoid O(habits) inner loop per day.
-    val scheduledCountByDow = (1..7).associateWith { dow ->
-        activeHabits.count { h -> h.scheduledDays.isEmpty() || h.scheduledDays.contains(dow) }
-    }
+    // Per-date loop: counts scheduled habits per day using isScheduledOn so that habits
+    // created mid-month are only counted from their creation date forward.
+    // This is O(days × habits) — acceptable for a ≤ 31-day month window.
     val daysBetween = ChronoUnit.DAYS.between(monthStart, monthEnd).toInt()
+    // missCountByDow[dow] = number of days with that DOW where completions < scheduled
     val missCountByDow = (1..7).associateWith { dow ->
-        val scheduledCount = scheduledCountByDow[dow] ?: 0
-        if (scheduledCount == 0) return@associateWith 0
         var missed = 0
         var date = monthStart
         repeat(daysBetween + 1) {
             if (date.dayOfWeek.value == dow) {
-                val completedCount = currentCompletions.count { it.completionDate == date }
-                if (completedCount < scheduledCount) missed++
+                // Only habits that were active AND scheduled on this specific date count
+                val scheduledOnDate = activeHabits.count { h -> h.isScheduledOn(date) }
+                if (scheduledOnDate > 0) {
+                    val completedCount = currentCompletions.count { it.completionDate == date }
+                    if (completedCount < scheduledOnDate) missed++
+                }
             }
             date = date.plusDays(1)
         }
@@ -922,19 +924,19 @@ private fun detectBehavioralPatterns(
     }
 
     // Pattern 3: Most missed weekday (≥ 65% miss rate over last 4 weeks)
+    // Uses per-date isScheduledOn guard — habits created mid-window are only counted
+    // from their creation date, keeping miss-rate historically accurate.
     if (activeHabits.isNotEmpty() && recent.isNotEmpty()) {
-        val scheduledByDow = (1..7).associateWith { dow ->
-            activeHabits.count { h -> h.scheduledDays.isEmpty() || h.scheduledDays.contains(dow) }
-        }
         val missRateByDow = (1..7).associateWith { dow ->
-            val scheduledCount = scheduledByDow[dow] ?: 0
-            if (scheduledCount == 0) return@associateWith 0f
             val daysOfType = (0..27).map { today.minusDays(it.toLong()) }
                 .filter { it.dayOfWeek.value == dow }
             if (daysOfType.isEmpty()) return@associateWith 0f
             val missedDays = daysOfType.count { date ->
+                // Only count days where at least one habit was actually scheduled
+                val scheduledOnDate = activeHabits.count { h -> h.isScheduledOn(date) }
+                if (scheduledOnDate == 0) return@count false
                 val completed = recent.count { it.completionDate == date }
-                completed < scheduledCount
+                completed < scheduledOnDate
             }
             missedDays.toFloat() / daysOfType.size.toFloat()
         }

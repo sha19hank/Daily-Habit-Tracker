@@ -64,13 +64,15 @@ class HabitRepository(
         title: String,
         body: String,
         date: LocalDate,
-        mood: String?
+        mood: String?,
+        color: Int = 0
     ) {
         val entry = JournalEntryEntity(
             title = title.trim(),
             body = body.trim(),
             date = date,
-            mood = mood?.trim()?.ifBlank { null }
+            mood = mood?.trim()?.ifBlank { null },
+            color = color
         )
         journalDao.upsertEntry(entry)
     }
@@ -113,8 +115,7 @@ class HabitRepository(
     }
 
     suspend fun markCompleted(habit: HabitEntity, today: LocalDate): Int? {
-        if (habit.paused) return null
-        if (!isScheduledForDay(habit, today)) return null
+        if (!habit.isScheduledOn(today)) return null
         if (habit.lastCompletedDate == today) return null
         if (habit.lastCompletedDate != null && habit.lastCompletedDate.isAfter(today)) return null
 
@@ -263,12 +264,6 @@ class HabitRepository(
         return base
     }
 
-    fun isScheduledForDay(habit: HabitEntity, date: LocalDate): Boolean {
-        val scheduled = habit.scheduledDays
-        if (scheduled.isEmpty()) return true
-        return scheduled.contains(date.dayOfWeek.value)
-    }
-
     suspend fun goalProgressPercent(goal: GoalEntity, today: LocalDate): Int {
         val details = goalProgressDetails(goal, today)
         return details.overallPercent
@@ -354,40 +349,34 @@ class HabitRepository(
         end: LocalDate
     ): Int {
         if (end.isBefore(start)) return 0
-        val scheduled = habit.scheduledDays
         val daysBetween = ChronoUnit.DAYS.between(start, end).toInt()
-        if (scheduled.isEmpty()) return daysBetween + 1
 
         var count = 0
         var date = start
         repeat(daysBetween + 1) {
-            if (scheduled.contains(date.dayOfWeek.value)) count += 1
+            if (habit.isScheduledOn(date)) count += 1
             date = date.plusDays(1)
         }
         return count
     }
 
     private fun previousScheduledDate(habit: HabitEntity, today: LocalDate): LocalDate? {
-        val scheduled = habit.scheduledDays
-        if (scheduled.isEmpty()) return today.minusDays(1)
         var date = today.minusDays(1)
         repeat(7) {
-            if (scheduled.contains(date.dayOfWeek.value)) return date
+            if (habit.isScheduledOn(date)) return date
             date = date.minusDays(1)
         }
         return null
     }
 
     private fun missedScheduledDay(habit: HabitEntity, lastCompleted: LocalDate, today: LocalDate): Boolean {
-        val scheduled = habit.scheduledDays
         val yesterday = today.minusDays(1)
         if (lastCompleted.isAfter(yesterday) || lastCompleted == yesterday) return false
-        if (scheduled.isEmpty()) return true
 
         val daysBetween = ChronoUnit.DAYS.between(lastCompleted, yesterday).toInt()
         for (i in 1..daysBetween) {
             val date = lastCompleted.plusDays(i.toLong())
-            if (scheduled.contains(date.dayOfWeek.value)) return true
+            if (habit.isScheduledOn(date)) return true
         }
         return false
     }

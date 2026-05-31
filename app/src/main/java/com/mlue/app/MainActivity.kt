@@ -25,6 +25,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawWithContent
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavHostController
@@ -94,9 +96,15 @@ private fun AppNavHost(viewModel: HabitViewModel) {
 
     val bottomBarRoutes = remember { setOf("today", "calendar", "journal", "insights", "settings") }
     val showBottomBar = currentRoute in bottomBarRoutes
-    val showFab = currentRoute == "today" || currentRoute == "journal" || currentRoute == "insights"
     val journalDialogRequest = rememberSaveable { mutableStateOf(false) }
     val goalDialogRequest = rememberSaveable { mutableStateOf(false) }
+    // Tracks whether the journal editor overlay is open — used to hide the global FAB
+    // so the editor's own Save/Close actions are the only action surface.
+    var journalEditorOpen by remember { mutableStateOf(false) }
+    // FAB hides when journal editor is open — editor's own Save/Close are the action surface
+    val showFab = currentRoute == "today" ||
+        (currentRoute == "journal" && !journalEditorOpen) ||
+        currentRoute == "insights"
     val fabInteractionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() }
     val isFabPressed by fabInteractionSource.collectIsPressedAsState()
     // FAB scroll-awareness: hoisted state written by HomeScreen callback
@@ -183,7 +191,8 @@ private fun AppNavHost(viewModel: HabitViewModel) {
                     JournalScreen(
                         viewModel = viewModel,
                         openDialogRequest = journalDialogRequest.value,
-                        onDialogRequestConsumed = { journalDialogRequest.value = false }
+                        onDialogRequestConsumed = { journalDialogRequest.value = false },
+                        onEditorStateChange = { open -> journalEditorOpen = open }
                     )
                 }
                 composable(
@@ -292,19 +301,29 @@ private fun BottomNavBar(
     val currentDestination = navBackStackEntry?.destination
 
     val dockShape = RoundedCornerShape(36.dp)
+    // Dark: slightly less opaque (0.88 vs 0.92) — lets background depth breathe through
+    // Light: warm cream surface, same as before
     val dockColor = if (darkMode)
-        androidx.compose.material3.MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
+        androidx.compose.material3.MaterialTheme.colorScheme.surface.copy(alpha = 0.88f)
     else
         androidx.compose.ui.graphics.Color(0xFFFFFDF9)
+
+    // Hairline top-edge tint: single-pixel highlight at the top of the dock
+    // In dark mode: very soft white line reads as "glass edge" — felt, not seen
+    // In light mode: warm hairline echoes the topology border language
+    val edgeHighlightColor = if (darkMode)
+        androidx.compose.ui.graphics.Color.White.copy(alpha = 0.07f)
+    else
+        androidx.compose.ui.graphics.Color(0xFFA08070).copy(alpha = 0.10f)
 
     // Single floating dock — no outer wrapper Surface
     // shadow() must be applied BEFORE clip() so it renders outside the clipped boundary
     NavigationBar(
         modifier = modifier
-            .padding(horizontal = 16.dp)   // 16 (was 20) — recovers width on narrow devices
+            .padding(horizontal = 20.dp)
             .padding(bottom = 20.dp, top = 0.dp)
             .fillMaxWidth()
-            .height(72.dp)   // 72 (was 68) — gives indicator room to breathe, prevents clipping
+            .height(72.dp)
             .then(
                 if (!darkMode) Modifier.shadow(
                     elevation = 10.dp,
@@ -318,7 +337,17 @@ private fun BottomNavBar(
                     ambientColor = androidx.compose.ui.graphics.Color(0xFF000000).copy(alpha = 0.15f)
                 )
             )
-            .clip(dockShape),
+            .clip(dockShape)
+            // Glass edge: single-pixel top highlight drawn after clip so it renders inside the shape
+            .drawWithContent {
+                drawContent()
+                drawLine(
+                    color = edgeHighlightColor,
+                    start = Offset(0f, 1f),
+                    end = Offset(size.width, 1f),
+                    strokeWidth = 1.5f
+                )
+            },
         containerColor = dockColor,
         tonalElevation = 0.dp,
         windowInsets = androidx.compose.foundation.layout.WindowInsets(0)
@@ -328,6 +357,9 @@ private fun BottomNavBar(
                 it.route?.substringBefore("?") == item.route
             } == true
             NavigationBarItem(
+                modifier = if (item == items.first()) Modifier.padding(start = 4.dp)
+                           else if (item == items.last()) Modifier.padding(end = 4.dp)
+                           else Modifier,
                 selected = selected,
                 onClick = {
                     // Guard: do nothing if already on this tab — prevents re-entrant
@@ -381,11 +413,12 @@ private fun BottomNavBar(
                         androidx.compose.material3.MaterialTheme.colorScheme.onSurfaceVariant
                     else
                         androidx.compose.ui.graphics.Color(0xFF9A8F88),
-                    // Indicator: slightly inset warm surface so capsule never clips dock edge
+                    // WS6: Slightly reduced capsule opacity — edge items clip less when indicator
+                    // color is slightly inset from the full-width pill Material3 renders by default.
                     indicatorColor = if (darkMode)
-                        androidx.compose.material3.MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                        androidx.compose.material3.MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.42f)
                     else
-                        androidx.compose.ui.graphics.Color(0xFFF0EBE3)
+                        androidx.compose.ui.graphics.Color(0xFFEDE8E0)
                 )
             )
         }

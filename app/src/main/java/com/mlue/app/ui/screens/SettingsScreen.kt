@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.outlined.ArrowBack
 import androidx.compose.material.icons.outlined.Bedtime
 import androidx.compose.material.icons.outlined.CenterFocusStrong
 import androidx.compose.material.icons.outlined.TouchApp
@@ -60,14 +59,6 @@ fun SettingsScreen(navController: NavController, viewModel: HabitViewModel) {
                         "Settings",
                         style = MaterialTheme.typography.titleLarge
                     )
-                },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Outlined.ArrowBack,
-                            contentDescription = "Back"
-                        )
-                    }
                 }
             )
         }
@@ -79,7 +70,7 @@ fun SettingsScreen(navController: NavController, viewModel: HabitViewModel) {
                 .padding(horizontal = 24.dp)
                 .padding(bottom = 32.dp)
                 .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(8.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
             Spacer(modifier = Modifier.height(8.dp))
 
@@ -94,7 +85,7 @@ fun SettingsScreen(navController: NavController, viewModel: HabitViewModel) {
                 )
             }
 
-            Spacer(modifier = Modifier.height(8.dp))
+            Spacer(modifier = Modifier.height(12.dp))
             SettingsSectionLabel("Behaviour")
             SettingsCard(isLightMode = isLightMode) {
                 SettingsRow(
@@ -135,7 +126,9 @@ fun SettingsScreen(navController: NavController, viewModel: HabitViewModel) {
 private fun SettingsSectionLabel(title: String) {
     Text(
         text = title,
-        style = MaterialTheme.typography.labelMedium,
+        style = MaterialTheme.typography.labelLarge.copy(
+            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+        ),
         color = MaterialTheme.colorScheme.primary,
         modifier = Modifier.padding(horizontal = 4.dp, vertical = 4.dp)
     )
@@ -147,10 +140,12 @@ private fun SettingsCard(
     content: @Composable () -> Unit
 ) {
     Surface(
-        color = if (isLightMode) LightSurface else DarkSurface,
+        color = if (isLightMode) com.mlue.app.ui.theme.LightSurfaceElevated else DarkSurface,
         shape = MaterialTheme.shapes.large,
+        // Light: warm topology hairline for panel definition
+        // Dark: no border — DarkSurface tonal contrast is the separator
         border = if (isLightMode) androidx.compose.foundation.BorderStroke(
-            1.dp, MaterialTheme.colorScheme.outlineVariant
+            0.5.dp, com.mlue.app.ui.theme.LightTopologyBorder
         ) else null
     ) {
         Column(

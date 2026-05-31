@@ -21,7 +21,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Star
@@ -88,12 +87,7 @@ fun CalendarScreen(navController: NavController, viewModel: HabitViewModel) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Consistency") },
-                navigationIcon = {
-                    IconButton(onClick = { navController.popBackStack() }) {
-                        Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                    }
-                }
+                title = { Text("Calendar") }
             )
         }
     ) { padding ->
@@ -117,9 +111,12 @@ fun CalendarScreen(navController: NavController, viewModel: HabitViewModel) {
             val isLightMode = MaterialTheme.colorScheme.background.luminance() > 0.5f
 
             Surface(
-                color = if (isLightMode) Color(0xFFFFFDF9) else MaterialTheme.colorScheme.surface,
+                color = if (isLightMode) com.mlue.app.ui.theme.LightSurfaceElevated else MaterialTheme.colorScheme.surface,
                 shape = MaterialTheme.shapes.large,
-                border = if (isLightMode) androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outline) else null,
+                // Light: warm topology hairline. Dark: no border — tonal depth is the separator
+                border = if (isLightMode)
+                    androidx.compose.foundation.BorderStroke(0.75.dp, com.mlue.app.ui.theme.LightTopologyBorder)
+                else null,
                 modifier = Modifier
                     .fillMaxWidth()
                     .then(
@@ -142,7 +139,9 @@ fun CalendarScreen(navController: NavController, viewModel: HabitViewModel) {
                         }
                         Text(
                             text = "${displayedMonth.month.name.lowercase().replaceFirstChar { it.uppercase() }} ${displayedMonth.year}",
-                            style = MaterialTheme.typography.titleMedium
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = FontWeight.SemiBold
+                            )
                         )
                         IconButton(onClick = { displayedMonth = displayedMonth.plusMonths(1) }) {
                             Icon(imageVector = Icons.Default.ChevronRight, contentDescription = "Next month")
@@ -223,7 +222,12 @@ fun StatCard(title: String, value: String, modifier: Modifier = Modifier, highli
         else if (MaterialTheme.colorScheme.background.luminance() > 0.5f)
             com.mlue.app.ui.theme.LightSurfaceVariant
         else
-            com.mlue.app.ui.theme.DarkSurface
+            com.mlue.app.ui.theme.DarkSurface,
+        // Light: topology hairline separates stat cards from background
+        // Dark: no border — DarkSurface tonal shift handles it
+        border = if (!highlight && MaterialTheme.colorScheme.background.luminance() > 0.5f)
+            androidx.compose.foundation.BorderStroke(0.5.dp, com.mlue.app.ui.theme.LightTopologyBorder)
+        else null
     ) {
         Column(
             modifier = Modifier.padding(12.dp),
@@ -340,8 +344,8 @@ private fun CalendarHeatmapCell(
         color = animatedColor,
         shape = RoundedCornerShape(12.dp),
         border = when {
-            isPerfect -> androidx.compose.foundation.BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary)
-            isToday -> androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
+            isPerfect -> androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.primary)
+            isToday -> androidx.compose.foundation.BorderStroke(0.75.dp, MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.4f))
             else -> null
         },
         tonalElevation = if (isPerfect) 8.dp else 0.dp
@@ -375,8 +379,8 @@ fun DayDetailSheet(
     journalEntries: List<JournalEntryEntity>,
     goals: List<GoalEntity>
 ) {
-    val completedHabits = habits.filter { completedIds.contains(it.id) }
-    val incompleteHabits = habits.filter { !completedIds.contains(it.id) && !it.paused }
+    val completedHabits = habits.filter { completedIds.contains(it.id) && it.isActiveOn(date) }
+    val incompleteHabits = habits.filter { !completedIds.contains(it.id) && it.isScheduledOn(date) }
     val goalsContributed = goals.filter { goal -> completedHabits.any { it.goalId == goal.goalId } }
 
     val total = completedHabits.size + incompleteHabits.size

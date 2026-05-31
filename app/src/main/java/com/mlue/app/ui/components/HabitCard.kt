@@ -274,6 +274,39 @@ fun HabitCard(
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                    // Description — expanded-only, collapsed stays clean
+                    if (!habit.description.isNullOrBlank()) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(
+                            text = habit.description!!,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.graphicsLayer { alpha = 0.85f }
+                        )
+                    }
+                    // Category chip — muted, expanded-only, distinct from goal chip (no emoji prefix)
+                    if (!habit.category.isNullOrBlank()) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        androidx.compose.material3.SuggestionChip(
+                            onClick = { },
+                            label = {
+                                Text(
+                                    habit.category!!,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            },
+                            border = androidx.compose.foundation.BorderStroke(
+                                0.5.dp,
+                                MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
+                            ),
+                            colors = androidx.compose.material3.SuggestionChipDefaults.suggestionChipColors(
+                                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                                labelColor = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        )
+                    }
                     Spacer(modifier = Modifier.height(8.dp))
                     // FlowRow wraps buttons on narrow screens instead of overflowing
                     FlowRow(

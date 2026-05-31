@@ -16,7 +16,7 @@ import androidx.sqlite.db.SupportSQLiteDatabase
         GoalEntity::class,
         JournalEntryEntity::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -31,7 +31,7 @@ abstract class HabitDatabase : RoomDatabase() {
                 context,
                 HabitDatabase::class.java,
                 "habit_tracker.db"
-            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6).build()
+            ).addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7).build()
         }
     }
 }
@@ -108,5 +108,13 @@ private val MIGRATION_5_6 = object : Migration(5, 6) {
         db.execSQL("ALTER TABLE habits ADD COLUMN highestCelebratedMilestone INTEGER NOT NULL DEFAULT 0")
         db.execSQL("ALTER TABLE goals ADD COLUMN isCompleted INTEGER NOT NULL DEFAULT 0")
         db.execSQL("ALTER TABLE goals ADD COLUMN completedDate TEXT")
+    }
+}
+
+private val MIGRATION_6_7 = object : Migration(6, 7) {
+    override fun migrate(db: SupportSQLiteDatabase) {
+        android.util.Log.d("MlueStartup", "HabitDatabase: Running MIGRATION_6_7")
+        // Add color column to journal entries — 0 = neutral (no color theme)
+        db.execSQL("ALTER TABLE journal_entries ADD COLUMN color INTEGER NOT NULL DEFAULT 0")
     }
 }

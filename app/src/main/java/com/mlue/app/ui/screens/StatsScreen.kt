@@ -148,7 +148,12 @@ fun StatsScreen(
             Surface(
                 color = if (isLightStats) com.mlue.app.ui.theme.LightSurface
                         else com.mlue.app.ui.theme.DarkSurface,
-                shape = MaterialTheme.shapes.medium
+                shape = MaterialTheme.shapes.medium,
+                // Light: warm hairline separates this panel from background
+                // Dark: no border — DarkSurface tonal shift is the separator
+                border = if (isLightStats)
+                    BorderStroke(0.5.dp, com.mlue.app.ui.theme.LightTopologyBorder)
+                else null
             ) {
                 Column(
                     modifier = Modifier
@@ -156,7 +161,12 @@ fun StatsScreen(
                         .padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text(text = "Active Goals", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        text = "Active Goals",
+                        style = MaterialTheme.typography.titleMedium.copy(
+                            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                        )
+                    )
                     if (activeGoals.isEmpty()) {
                         Text(
                             text = "Patterns appear with time.",
@@ -181,12 +191,13 @@ fun StatsScreen(
                             val isLightStats2 = MaterialTheme.colorScheme.background.luminance() > 0.5f
                             Surface(
                                 // Highlighted: primaryContainer; normal: static surface token
+                                // Dark: DarkSurfaceVariant — one step brighter than DarkSurface for card emergence
                                 color = if (isHighlighted)
                                     MaterialTheme.colorScheme.primaryContainer
                                 else if (isLightStats2)
                                     com.mlue.app.ui.theme.LightSurfaceVariant
                                 else
-                                    com.mlue.app.ui.theme.DarkSurface,
+                                    com.mlue.app.ui.theme.DarkSurfaceVariant,  // was DarkSurface — lifts goal cards out of the background
                                 shape = MaterialTheme.shapes.small,
                                 border = if (isHighlighted) BorderStroke(1.dp, MaterialTheme.colorScheme.primary) else null,
                                 modifier = Modifier
@@ -307,7 +318,10 @@ fun StatsScreen(
                                                     Text(
                                                         text = "${hp.completed}/${hp.expected} (${hp.percent}%)",
                                                         style = MaterialTheme.typography.labelSmall,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                        color = if (MaterialTheme.colorScheme.background.luminance() > 0.5f)
+                                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                                        else
+                                                            Color(0xFFB0B3B8) // Slightly brighter secondary text for dark mode
                                                     )
                                                 }
                                             }
@@ -319,7 +333,7 @@ fun StatsScreen(
                                             color = if (isLightStatsMode)
                                                 com.mlue.app.ui.theme.LightSurfaceVariant
                                             else
-                                                com.mlue.app.ui.theme.DarkSurfaceVariant,
+                                                com.mlue.app.ui.theme.DarkSurface, // was DarkSurfaceVariant — rests inside the elevated card
                                             shape = MaterialTheme.shapes.small,
                                             border = if (isLightStatsMode) BorderStroke(1.dp, MaterialTheme.colorScheme.outline) else null,
                                             modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
@@ -343,7 +357,8 @@ fun StatsScreen(
                 Surface(
                     color = if (isLightStats) com.mlue.app.ui.theme.LightSurface
                             else com.mlue.app.ui.theme.DarkSurface,
-                    shape = MaterialTheme.shapes.medium
+                    shape = MaterialTheme.shapes.medium,
+                    border = if (isLightStats) BorderStroke(0.5.dp, com.mlue.app.ui.theme.LightTopologyBorder) else null
                 ) {
                     Column(
                         modifier = Modifier
@@ -386,7 +401,8 @@ fun StatsScreen(
                 Surface(
                     color = if (isLightStats) com.mlue.app.ui.theme.LightSurface
                             else com.mlue.app.ui.theme.DarkSurface,
-                    shape = MaterialTheme.shapes.medium
+                    shape = MaterialTheme.shapes.medium,
+                    border = if (isLightStats) BorderStroke(0.5.dp, com.mlue.app.ui.theme.LightTopologyBorder) else null
                 ) {
                     Column(
                         modifier = Modifier.fillMaxWidth().padding(16.dp),
@@ -401,7 +417,8 @@ fun StatsScreen(
                 Surface(
                     color = if (isLightStats) com.mlue.app.ui.theme.LightSurface
                             else com.mlue.app.ui.theme.DarkSurface,
-                    shape = MaterialTheme.shapes.medium
+                    shape = MaterialTheme.shapes.medium,
+                    border = if (isLightStats) BorderStroke(0.5.dp, com.mlue.app.ui.theme.LightTopologyBorder) else null
                 ) {
                     Row(
                         modifier = Modifier
@@ -419,7 +436,8 @@ fun StatsScreen(
                 Surface(
                     color = if (isLightStats) com.mlue.app.ui.theme.LightSurface
                             else com.mlue.app.ui.theme.DarkSurface,
-                    shape = MaterialTheme.shapes.medium
+                    shape = MaterialTheme.shapes.medium,
+                    border = if (isLightStats) BorderStroke(0.5.dp, com.mlue.app.ui.theme.LightTopologyBorder) else null
                 ) {
                     Column(
                         modifier = Modifier
@@ -438,7 +456,12 @@ fun StatsScreen(
                             weekRate >= 50 -> "Building consistency"
                             else -> "Room to rebuild"
                         }
-                        Text(text = "Weekly Recap", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            text = "Weekly Recap",
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                            )
+                        )
                         Text(
                             text = weekLabel,
                             style = MaterialTheme.typography.bodyMedium,
@@ -461,7 +484,8 @@ fun StatsScreen(
                 Surface(
                     color = if (isLightStats) com.mlue.app.ui.theme.LightSurface
                             else com.mlue.app.ui.theme.DarkSurface,
-                    shape = MaterialTheme.shapes.medium
+                    shape = MaterialTheme.shapes.medium,
+                    border = if (isLightStats) BorderStroke(0.5.dp, com.mlue.app.ui.theme.LightTopologyBorder) else null
                 ) {
                     Column(
                         modifier = Modifier
@@ -476,7 +500,12 @@ fun StatsScreen(
                             consistencyScore >= 30 -> "Inconsistent"
                             else -> "Restarting"
                         }
-                        Text(text = "Consistency Score", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            text = "Consistency Score",
+                            style = MaterialTheme.typography.titleMedium.copy(
+                                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                            )
+                        )
                         Text(
                             text = "$consistencyScore · $scoreLabel",
                             style = MaterialTheme.typography.bodyMedium,
@@ -516,7 +545,10 @@ fun StatsScreen(
                         com.mlue.app.ui.theme.LightSurface
                     else
                         com.mlue.app.ui.theme.DarkSurface,
-                    shape = MaterialTheme.shapes.medium
+                    shape = MaterialTheme.shapes.medium,
+                    border = if (MaterialTheme.colorScheme.background.luminance() > 0.5f)
+                        BorderStroke(0.5.dp, com.mlue.app.ui.theme.LightTopologyBorder)
+                    else null
                 ) {
                     Column(
                         modifier = Modifier

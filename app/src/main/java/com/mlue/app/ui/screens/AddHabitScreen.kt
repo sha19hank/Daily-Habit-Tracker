@@ -124,7 +124,12 @@ fun AddHabitScreen(
     val textFieldColors = OutlinedTextFieldDefaults.colors(
         unfocusedContainerColor = fieldFillColor,
         focusedContainerColor = fieldFocusedFillColor,
-        unfocusedBorderColor = androidx.compose.material3.MaterialTheme.colorScheme.outline,
+        // Light: slightly stronger hairline for field topology definition
+        // Dark: unchanged outline — tonal separation handles it
+        unfocusedBorderColor = if (isLightMode)
+            com.mlue.app.ui.theme.LightTopologyBorderStrong
+        else
+            androidx.compose.material3.MaterialTheme.colorScheme.outline,
         focusedBorderColor = androidx.compose.material3.MaterialTheme.colorScheme.primary
     )
     
@@ -263,7 +268,9 @@ fun AddHabitScreen(
             Spacer(modifier = Modifier.height(24.dp))
             Text(
                 text = "Schedule",
-                style = androidx.compose.material3.MaterialTheme.typography.titleSmall,
+                style = androidx.compose.material3.MaterialTheme.typography.titleSmall.copy(
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                ),
                 color = if (showDaysError) com.mlue.app.ui.theme.LightDangerRed else androidx.compose.material3.MaterialTheme.colorScheme.onSurface
             )
             val daysErrorBorderColor = if (showDaysError) com.mlue.app.ui.theme.LightDangerRed.copy(alpha = 0.5f) else androidx.compose.ui.graphics.Color.Transparent
@@ -300,7 +307,12 @@ fun AddHabitScreen(
                 )
             }
             Spacer(modifier = Modifier.height(24.dp))
-            Text(text = "Color", style = androidx.compose.material3.MaterialTheme.typography.titleSmall)
+            Text(
+                text = "Color",
+                style = androidx.compose.material3.MaterialTheme.typography.titleSmall.copy(
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold
+                )
+            )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 DEFAULT_COLORS.forEach { colorInt ->
                     val selected = selectedColor == colorInt
@@ -323,7 +335,8 @@ fun AddHabitScreen(
             Spacer(modifier = Modifier.height(24.dp))
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically
             ) {
                 Text(text = "Reminder")
                 Switch(

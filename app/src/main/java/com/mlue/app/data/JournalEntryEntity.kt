@@ -15,5 +15,6 @@ data class JournalEntryEntity(
     val body: String,
     val date: LocalDate,
     val mood: String? = null,
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    val color: Int = 0  // 0 = no color (neutral); matches habit card color palette
 )

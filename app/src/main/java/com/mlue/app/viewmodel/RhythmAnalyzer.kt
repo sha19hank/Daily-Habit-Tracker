@@ -84,13 +84,14 @@ private fun weekdayClusterObservation(
     val completedByDow = (1..7).associateWith { dow ->
         recent.count { it.completionDate.dayOfWeek.value == dow }
     }
-    // Scheduled count by day of week (how often each dow occurred in window × habits)
+    // Scheduled count by day of week (sum of habits scheduled on each specific past day)
     val scheduledByDow = (1..7).associateWith { dow ->
-        val dayCount = (0..27).count { today.minusDays(it.toLong()).dayOfWeek.value == dow }
-        val habitsScheduledOnDow = habits.count { h ->
-            h.scheduledDays.isEmpty() || h.scheduledDays.contains(dow)
+        (0..27).sumOf { offset ->
+            val date = today.minusDays(offset.toLong())
+            if (date.dayOfWeek.value == dow) {
+                habits.count { h -> h.isScheduledOn(date) }
+            } else 0
         }
-        dayCount * habitsScheduledOnDow
     }
 
     // Rate per day-of-week, skipping days with zero scheduled
